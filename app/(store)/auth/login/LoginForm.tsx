@@ -6,9 +6,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/lib/hooks/useAuth'
 import { toast } from 'sonner'
 import { Laptop, ShieldCheck } from 'lucide-react'
+import { AxiosError } from 'axios'
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? ''
 
@@ -19,40 +20,32 @@ export default function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [emailVal, setEmailVal] = useState('')
   const [passVal,  setPassVal]  = useState('')
+  const { login } = useAuth()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    const supabase = createClient()
 
-    const { error, data } = await supabase.auth.signInWithPassword({
-      email: emailVal,
-      password: passVal,
-    })
+    try {
+      await login(emailVal, passVal)
 
-    if (error) {
-      toast.error(error.message)
-      setLoading(false)
-      return
-    }
-
-    // Check if user is admin → redirect to /admin instead of /compte
-    if (data.user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', data.user.id)
-        .single()
-
-      if (profile?.role === 'admin') {
+      // Récupérer le user depuis le store pour vérifier le rôle
+      const { user } = useAuth.getState()
+      if (user?.role === 'admin') {
         router.push('/admin')
         router.refresh()
         return
       }
-    }
 
-    router.push(redirect)
-    router.refresh()
+      router.push(redirect)
+      router.refresh()
+    } catch (err) {
+      const axiosErr = err as AxiosError<{ message?: string }>
+      const message =
+        axiosErr.response?.data?.message ?? 'Identifiants incorrects.'
+      toast.error(message)
+      setLoading(false)
+    }
   }
 
   return (

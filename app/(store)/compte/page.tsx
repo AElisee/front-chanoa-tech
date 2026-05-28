@@ -3,51 +3,50 @@ import { redirect } from 'next/navigation'
 import { buttonVariants } from '@/components/ui/button-variants'
 import type { Metadata } from 'next'
 import { OrderStatusBadge } from '@/components/store/OrderStatusBadge'
-import type { OrderStatus } from '@/lib/supabase/types'
-import { createClient } from '@/lib/supabase/server'
+import type { OrderStatus } from '@/lib/api/orders'
+import { getAuthenticatedUser } from '@/lib/auth-server'
 import { formatFCFA } from '@/lib/utils/format'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { OrderListResponse } from '@/lib/api/orders'
 
 export const metadata: Metadata = { title: 'Mon compte — Chanoa Tech' }
 
 export default async function ComptePage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthenticatedUser()
   if (!user) redirect('/auth/login?redirect=/compte')
 
-  const [profileRes, ordersRes, roleRes] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('full_name, email')
-      .eq('id', user.id)
-      .single(),
-    supabase
-      .from('orders')
-      .select('id, status, total, created_at, order_items(id)')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(5),
-    supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single(),
-  ])
-  const profile = profileRes.data as { full_name: string | null; email: string } | null
-  const isAdmin = (roleRes.data as { role: string } | null)?.role === 'admin'
+  const isAdmin = user.role === 'admin'
 
-  const recentOrders = (ordersRes.data ?? []) as Array<{
+  // ── Charger les commandes récentes via l'API ─────────────────────
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
+
+  type RecentOrder = {
     id: string
     status: string
     total: number
     created_at: string
-    order_items: Array<{ id: string }>
-  }>
+    order_items?: Array<{ id: string }>
+  }
+
+  let recentOrders: RecentOrder[] = []
+  try {
+    const res = await apiClient.get<OrderListResponse>('/orders', {
+      params: { limit: 5 },
+      headers,
+    })
+    recentOrders = (res.data.data ?? []) as RecentOrder[]
+  } catch {
+    // silencieux
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
       <h1 className="mb-2 text-2xl font-bold">Mon compte</h1>
       <p className="mb-8 text-muted-foreground">
-        Bonjour, {profile?.full_name ?? profile?.email ?? user.email}
+        Bonjour, {user.email}
       </p>
 
       {/* Admin banner */}
@@ -115,30 +114,32 @@ export default async function ComptePage() {
           <p className="text-sm text-muted-foreground">Aucune commande pour l&apos;instant.</p>
         ) : (
           <div className="space-y-3">
-            {recentOrders.map((order) => (
-              <Link
-                key={order.id}
-                href="/compte/commandes"
-                className="flex items-center justify-between rounded-xl border bg-white p-4 shadow-sm hover:border-primary"
-              >
-                <div>
-                  <p className="text-sm font-medium">
-                    Commande #{order.id.slice(0, 8).toUpperCase()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(order.created_at).toLocaleDateString('fr-FR')} ·{' '}
-                    {order.order_items.length} article
-                    {order.order_items.length > 1 ? 's' : ''}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-primary">
-                    {formatFCFA(order.total)}
-                  </span>
-                  <OrderStatusBadge status={order.status as OrderStatus} />
-                </div>
-              </Link>
-            ))}
+            {recentOrders.map((order) => {
+              const itemCount = order.order_items?.length ?? 0
+              return (
+                <Link
+                  key={order.id}
+                  href="/compte/commandes"
+                  className="flex items-center justify-between rounded-xl border bg-white p-4 shadow-sm hover:border-primary"
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      Commande #{order.id.slice(0, 8).toUpperCase()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(order.created_at).toLocaleDateString('fr-FR')} ·{' '}
+                      {itemCount} article{itemCount > 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-primary">
+                      {formatFCFA(order.total)}
+                    </span>
+                    <OrderStatusBadge status={order.status as OrderStatus} />
+                  </div>
+                </Link>
+              )
+            })}
           </div>
         )}
       </div>

@@ -5,63 +5,99 @@ import type { Metadata } from 'next'
 import { Package, ChevronRight, ShieldCheck, Truck, RotateCcw } from 'lucide-react'
 import ProductCard from '@/components/store/ProductCard'
 import ProductDetailClient from '@/components/store/ProductDetailClient'
-import { createClient } from '@/lib/supabase/server'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { ProductDto, ProductListResponse } from '@/lib/api/products'
+import type { CategoryDto, CategoryListResponse } from '@/lib/api/categories'
 
 interface Props {
   params: Promise<{ slug: string }>
 }
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+async function getProductBySlug(slug: string, headers: Record<string, string>): Promise<ProductDto | null> {
+  try {
+    // Tenter d'abord GET /products/:slug (si l'API accepte le slug comme id)
+    const res = await apiClient.get<ProductDto>(`/products/${slug}`, { headers })
+    return res.data
+  } catch {
+    // Fallback : chercher via search
+    try {
+      const res = await apiClient.get<ProductListResponse>('/products', {
+        params: { search: slug, limit: 1 },
+        headers,
+      })
+      const found = res.data.data?.find((p) => p.slug === slug)
+      return found ?? null
+    } catch {
+      return null
+    }
+  }
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('products')
-    .select('name, description, brand, images')
-    .eq('slug', slug)
-    .eq('is_active', true)
-    .single()
+  const headers = await getAuthHeaders()
+  const product = await getProductBySlug(slug, headers)
 
-  if (!data) return { title: 'Produit introuvable' }
-  const desc = data.description?.slice(0, 160) ?? `${data.brand ?? ''} ${data.name} disponible chez Chanoa Tech.`
+  if (!product) return { title: 'Produit introuvable' }
+  const desc = product.description?.slice(0, 160) ?? `${product.brand ?? ''} ${product.name} disponible chez Chanoa Tech.`
   return {
-    title: `${data.name} — Chanoa Tech`,
+    title: `${product.name} — Chanoa Tech`,
     description: desc,
     openGraph: {
-      title: data.name,
+      title: product.name,
       description: desc,
-      ...(data.images?.[0] && { images: [{ url: data.images[0] }] }),
+      ...(product.images?.[0] && { images: [{ url: product.images[0] }] }),
     },
   }
 }
 
 export default async function ProductPage({ params }: Props) {
   const { slug } = await params
-  const supabase = await createClient()
+  const headers = await getAuthHeaders()
 
-  // ── Load product ─────────────────────────────────────────────────
-  const { data: product } = await supabase
-    .from('products')
-    .select(`
-      id, name, slug, description, price, price_eur, compare_price,
-      stock, images, brand, model, sku, is_active,
-      category_id,
-      categories(id, name, slug, parent_id)
-    `)
-    .eq('slug', slug)
-    .eq('is_active', true)
-    .single()
+  // ── Charger le produit ───────────────────────────────────────────
+  const product = await getProductBySlug(slug, headers)
+  if (!product || !product.is_active) notFound()
 
-  if (!product) notFound()
+  // ── Charger les produits similaires ─────────────────────────────
+  let related: ProductDto[] = []
+  if (product.category_id) {
+    try {
+      const res = await apiClient.get<ProductListResponse>('/products', {
+        params: { categoryId: product.category_id, limit: 8 },
+        headers,
+      })
+      related = (res.data.data ?? []).filter((p) => p.id !== product.id).slice(0, 8)
+    } catch {
+      // silencieux
+    }
+  }
 
-  // ── Load variants ────────────────────────────────────────────────
-  const { data: variantsRaw } = await supabase
-    .from('product_variants')
-    .select('id, sku, options, price, price_eur, compare_price, stock')
-    .eq('product_id', product.id)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
+  // ── Charger la catégorie pour le breadcrumb ──────────────────────
+  let cat: CategoryDto | null = null
+  let parentCat: { name: string; slug: string } | null = null
+  if (product.category_id) {
+    try {
+      const res = await apiClient.get<CategoryDto>(`/categories/${product.category_id}`, { headers })
+      cat = res.data
+      if (cat.parent_id) {
+        const parentRes = await apiClient.get<CategoryDto>(`/categories/${cat.parent_id}`, { headers })
+        parentCat = { name: parentRes.data.name, slug: parentRes.data.slug }
+      }
+    } catch {
+      // silencieux
+    }
+  }
 
-  const variants = (variantsRaw ?? []) as {
+  // Les variantes sont gérées côté API mais non exposées dans l'endpoint actuel — tableau vide
+  const variants: {
     id: string
     sku: string | null
     options: Record<string, string>
@@ -69,28 +105,7 @@ export default async function ProductPage({ params }: Props) {
     price_eur: number | null
     compare_price: number | null
     stock: number
-  }[]
-
-  // ── Load related products ────────────────────────────────────────
-  const { data: related } = await supabase
-    .from('products')
-    .select('id, name, slug, price, price_eur, compare_price, stock, images, brand, model, categories(name, slug)')
-    .eq('category_id', product.category_id)
-    .eq('is_active', true)
-    .neq('id', product.id)
-    .limit(8)
-
-  // ── Category breadcrumb ──────────────────────────────────────────
-  const cat = product.categories as unknown as { id: string; name: string; slug: string; parent_id: string | null } | null
-  let parentCat: { name: string; slug: string } | null = null
-  if (cat?.parent_id) {
-    const { data: p } = await supabase
-      .from('categories')
-      .select('name, slug')
-      .eq('id', cat.parent_id)
-      .single()
-    parentCat = p
-  }
+  }[] = []
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -182,7 +197,7 @@ export default async function ProductPage({ params }: Props) {
 
           {/* Interactive: variants + price + add to cart */}
           <div className="mt-5">
-            <ProductDetailClient product={product} variants={variants} />
+            <ProductDetailClient product={product as never} variants={variants} />
           </div>
 
           {/* Trust strip */}
@@ -214,7 +229,7 @@ export default async function ProductPage({ params }: Props) {
       </div>
 
       {/* Related products */}
-      {related && related.length > 0 && (
+      {related.length > 0 && (
         <section className="mt-16">
           <div className="mb-6 flex items-center justify-between">
             <h2 className="text-xl font-bold">Produits similaires</h2>
@@ -224,7 +239,7 @@ export default async function ProductPage({ params }: Props) {
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {related.map((p) => (
-              <ProductCard key={p.id} product={p as any} />
+              <ProductCard key={p.id} product={p as never} />
             ))}
           </div>
         </section>

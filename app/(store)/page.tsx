@@ -3,7 +3,7 @@ import Image from 'next/image'
 import type { Metadata } from 'next'
 import { buttonVariants } from '@/components/ui/button-variants'
 import ProductCard from '@/components/store/ProductCard'
-import { createClient } from '@/lib/supabase/server'
+import { productsApi } from '@/lib/api/products'
 
 export const metadata: Metadata = {
   title: 'Chanoa Tech — Store IT Professionnel en Afrique de l\'Ouest',
@@ -147,14 +147,13 @@ const trustItems = [
 ]
 
 export default async function HomePage() {
-  const supabase = await createClient()
-
-  const { data: products } = await supabase
-    .from('products')
-    .select('id, name, slug, price, price_eur, compare_price, stock, images, brand, model, categories(name, slug)')
-    .eq('is_active', true)
-    .order('created_at', { ascending: false })
-    .limit(8)
+  let products: import('@/lib/api/products').ProductDto[] = []
+  try {
+    const result = await productsApi.getProducts({ limit: 8 })
+    products = result.data.data
+  } catch {
+    // Silencieux — la section produits ne s'affiche pas si l'API est indisponible
+  }
 
   return (
     <>

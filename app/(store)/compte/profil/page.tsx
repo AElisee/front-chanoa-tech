@@ -4,31 +4,31 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
+import { authApi } from '@/lib/api/auth'
+import { usersApi } from '@/lib/api/users'
+import { clearAccessToken } from '@/lib/api/client'
 
 export default function ProfilPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [profile, setProfile] = useState({ full_name: '', phone: '', email: '' })
+  const [userId, setUserId] = useState<string | null>(null)
+  const [profile, setProfile] = useState({ name: '', phone: '', email: '' })
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/auth/login'); return }
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name, email, phone')
-        .eq('id', user.id)
-        .single() as { data: { full_name: string | null; email: string; phone: string | null } | null }
-      if (data) {
+      try {
+        const res = await authApi.getProfile()
+        const data = res.data
+        setUserId(data.id)
         setProfile({
-          full_name: data.full_name ?? '',
+          name: data.name ?? '',
           phone: data.phone ?? '',
           email: data.email,
         })
+      } catch {
+        router.push('/auth/login')
       }
     }
     load()
@@ -36,24 +36,28 @@ export default function ProfilPage() {
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!userId) return
     setLoading(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({ full_name: profile.full_name, phone: profile.phone })
-      .eq('id', user.id)
-
-    if (error) toast.error(error.message)
-    else toast.success('Profil mis à jour')
-    setLoading(false)
+    try {
+      await usersApi.updateUser(userId, {
+        name: profile.name,
+        phone: profile.phone || null,
+      })
+      toast.success('Profil mis à jour')
+    } catch {
+      toast.error('Erreur lors de la mise à jour')
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleSignOut() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+    try {
+      await authApi.logout()
+    } catch {
+      // ignorer les erreurs de logout
+    }
+    clearAccessToken()
     router.push('/')
     router.refresh()
   }
@@ -67,11 +71,11 @@ export default function ProfilPage() {
           <Input value={profile.email} disabled className="bg-muted" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="full_name">Nom complet</Label>
+          <Label htmlFor="name">Nom complet</Label>
           <Input
-            id="full_name"
-            value={profile.full_name}
-            onChange={(e) => setProfile((p) => ({ ...p, full_name: e.target.value }))}
+            id="name"
+            value={profile.name}
+            onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))}
           />
         </div>
         <div className="space-y-1.5">

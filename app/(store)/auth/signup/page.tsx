@@ -6,36 +6,37 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/lib/hooks/useAuth'
 import { toast } from 'sonner'
 import { Laptop } from 'lucide-react'
+import { AxiosError } from 'axios'
 
 export default function SignupPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const { register } = useAuth()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
     const data = new FormData(e.currentTarget)
-    const supabase = createClient()
 
-    const { error } = await supabase.auth.signUp({
-      email: data.get('email') as string,
-      password: data.get('password') as string,
-      options: {
-        data: { full_name: data.get('full_name') as string },
-      },
-    })
+    try {
+      await register({
+        name: data.get('full_name') as string,
+        email: data.get('email') as string,
+        password: data.get('password') as string,
+      })
 
-    if (error) {
-      toast.error(error.message)
+      toast.success('Compte créé avec succès !')
+      router.push('/compte')
+    } catch (err) {
+      const axiosErr = err as AxiosError<{ message?: string }>
+      const message =
+        axiosErr.response?.data?.message ?? 'Erreur lors de la création du compte.'
+      toast.error(message)
       setLoading(false)
-      return
     }
-
-    toast.success('Compte créé ! Vérifiez votre email pour confirmer.')
-    router.push('/auth/login')
   }
 
   return (

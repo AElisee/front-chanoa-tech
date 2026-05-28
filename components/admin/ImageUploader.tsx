@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import Image from 'next/image'
 import { Upload, X, Loader2 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { mediaApi } from '@/lib/api/media'
 import { toast } from 'sonner'
 
 interface Props {
@@ -12,6 +12,11 @@ interface Props {
   maxImages?: number
   /** Target size for auto-crop. Default: 800x800 (1:1 square) */
   targetSize?: number
+  /**
+   * ID du produit existant. Si fourni, l'image est liée au produit en base.
+   * Si absent (nouveau produit), l'image est uploadée de façon temporaire.
+   */
+  productId?: string
 }
 
 /**
@@ -20,7 +25,7 @@ interface Props {
  * - Resizes to targetSize x targetSize
  * - Outputs WebP at 90% quality for optimal file size
  */
-async function processImage(file: File, targetSize: number): Promise<Blob> {
+async function processImage(file: File, targetSize: number): Promise<File> {
   const img = document.createElement('img')
   const url = URL.createObjectURL(file)
   await new Promise<void>((resolve, reject) => {
@@ -50,16 +55,28 @@ async function processImage(file: File, targetSize: number): Promise<Blob> {
   ctx.drawImage(img, sx, sy, side, side, 0, 0, targetSize, targetSize)
   URL.revokeObjectURL(url)
 
-  return new Promise<Blob>((resolve, reject) => {
+  return new Promise<File>((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('Canvas toBlob failed'))),
+      (blob) => {
+        if (!blob) {
+          reject(new Error('Canvas toBlob failed'))
+          return
+        }
+        resolve(new File([blob], `image-${Date.now()}.webp`, { type: 'image/webp' }))
+      },
       'image/webp',
       0.9
     )
   })
 }
 
-export default function ImageUploader({ initialImages, inputName = 'images', maxImages = 5, targetSize = 800 }: Props) {
+export default function ImageUploader({
+  initialImages,
+  inputName = 'images',
+  maxImages = 5,
+  targetSize = 800,
+  productId,
+}: Props) {
   const [images, setImages] = useState<string[]>(initialImages)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -75,43 +92,35 @@ export default function ImageUploader({ initialImages, inputName = 'images', max
     }
 
     setUploading(true)
-    const supabase = createClient()
     const newUrls: string[] = []
 
     for (let i = 0; i < Math.min(files.length, remaining); i++) {
       const file = files[i]
-      let blob: Blob
+      let processedFile: File
       try {
-        blob = await processImage(file, targetSize)
+        processedFile = await processImage(file, targetSize)
       } catch (err) {
         console.error('Image processing error:', err)
-        toast.error(`Image invalide: ${file.name}`)
+        toast.error(`Image invalide : ${file.name}`)
         continue
       }
 
-      const path = `products/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`
-
-      const { error } = await supabase.storage
-        .from('product-images')
-        .upload(path, blob, { upsert: true, contentType: 'image/webp' })
-
-      if (error) {
-        console.error('Upload error:', error)
-        if (error.message?.includes('not found') || error.message?.includes('Bucket')) {
-          toast.error('Bucket "product-images" introuvable. Créez-le dans Supabase Storage.')
-          setUploading(false)
-          return
+      try {
+        let result: { url: string }
+        if (productId) {
+          result = await mediaApi.uploadProductImage(productId, processedFile)
+        } else {
+          result = await mediaApi.uploadTemporary(processedFile)
         }
-        toast.error(`Erreur upload: ${error.message ?? file.name}`)
-        continue
-      }
 
-      const { data: urlData } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(path)
+        const fullUrl = result.url.startsWith('http')
+          ? result.url
+          : `${process.env.NEXT_PUBLIC_API_URL}${result.url}`
 
-      if (urlData?.publicUrl) {
-        newUrls.push(urlData.publicUrl)
+        newUrls.push(fullUrl)
+      } catch (err) {
+        console.error('Upload error:', err)
+        toast.error(`Erreur upload : ${file.name}`)
       }
     }
 
@@ -139,6 +148,7 @@ export default function ImageUploader({ initialImages, inputName = 'images', max
               <button
                 type="button"
                 onClick={() => removeImage(i)}
+                aria-label={`Supprimer l'image ${i + 1}`}
                 className="absolute right-0.5 top-0.5 hidden rounded-full bg-destructive p-0.5 text-white group-hover:block"
               >
                 <X className="h-3 w-3" />

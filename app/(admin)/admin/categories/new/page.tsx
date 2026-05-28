@@ -1,8 +1,12 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { ArrowLeft } from 'lucide-react'
-import { guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
+import { redirect } from 'next/navigation'
 import { createCategory } from '../actions'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
 
 export const metadata: Metadata = { title: 'Nouvelle catégorie — Admin' }
 
@@ -11,15 +15,26 @@ interface Props {
 }
 
 export default async function NewCategoryPage({ searchParams }: Props) {
-  const { parent_id, error } = await searchParams
-  const supabase = await guardAdmin()
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
 
-  const { data: parents } = await supabase
-    .from('categories')
-    .select('id, name')
-    .is('parent_id', null)
-    .eq('is_active', true)
-    .order('name')
+  const { parent_id, error } = await searchParams
+
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
+
+  let parents: CategoryDto[] = []
+  try {
+    const res = await apiClient.get<CategoryListResponse>('/categories', {
+      params: { limit: 100 },
+      headers,
+    })
+    parents = (res.data.data ?? []).filter((c) => !c.parent_id && c.is_active)
+  } catch {
+    // silencieux
+  }
 
   return (
     <div className="mx-auto max-w-xl">
@@ -53,7 +68,7 @@ export default async function NewCategoryPage({ searchParams }: Props) {
             placeholder="Généré automatiquement si vide"
             className="w-full rounded-md border px-3 py-2 text-sm font-mono focus:border-primary focus:outline-none"
           />
-          <p className="mt-1 text-xs text-muted-foreground">Utilisé dans l'URL : /boutique?categorie=slug</p>
+          <p className="mt-1 text-xs text-muted-foreground">Utilisé dans l&apos;URL : /boutique?categorie=slug</p>
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium">Catégorie parente</label>
@@ -63,13 +78,13 @@ export default async function NewCategoryPage({ searchParams }: Props) {
             className="w-full rounded-md border px-3 py-2 text-sm focus:border-primary focus:outline-none"
           >
             <option value="">— Catégorie principale —</option>
-            {(parents ?? []).map((p: { id: string; name: string }) => (
+            {parents.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium">URL de l'image</label>
+          <label className="mb-1.5 block text-sm font-medium">URL de l&apos;image</label>
           <input
             name="image_url"
             type="url"

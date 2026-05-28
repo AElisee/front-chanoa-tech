@@ -2,9 +2,12 @@ import ProductCard from '@/components/store/ProductCard'
 import CategoryFilter from '@/components/store/CategoryFilter'
 import { SearchBar } from '@/components/store/SearchBar'
 import SortSelect from '@/components/store/SortSelect'
-import { createClient } from '@/lib/supabase/server'
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { ProductListResponse, ProductDto } from '@/lib/api/products'
+import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
 
 export const metadata: Metadata = {
   title: 'Boutique — Chanoa Tech',
@@ -23,90 +26,70 @@ interface Props {
 
 const PAGE_SIZE = 12
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export default async function BoutiquePage({ searchParams }: Props) {
   const params = await searchParams
   const { categorie, q, tri = 'recent', page = '1', marque } = params
-  const offset = (Number(page) - 1) * PAGE_SIZE
+  const currentPage = Number(page)
 
-  const supabase = await createClient()
+  const headers = await getAuthHeaders()
 
-  // ── Load main categories (parent_id IS NULL) for filter sidebar ──
-  const { data: mainCategories } = await supabase
-    .from('categories')
-    .select('id, name, slug')
-    .is('parent_id', null)
-    .eq('is_active', true)
-    .order('sort_order')
-
-  // ── Resolve category filter: main cat slug → subcategory ids ──
-  let categoryIds: string[] | null = null
-  if (categorie) {
-    // Find main category
-    const { data: mainCat } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('slug', categorie)
-      .single()
-
-    if (mainCat) {
-      // Get all subcategories of this main category
-      const { data: subCats } = await supabase
-        .from('categories')
-        .select('id')
-        .eq('parent_id', mainCat.id)
-
-      categoryIds = subCats?.length
-        ? subCats.map((c) => c.id)
-        : [mainCat.id]
-    }
-  }
-
-  // ── Build product query ──────────────────────────────────────────
-  let query = supabase
-    .from('products')
-    .select(
-      'id, name, slug, price, price_eur, compare_price, stock, images, brand, model, categories(name, slug)',
-      { count: 'exact' }
-    )
-    .eq('is_active', true)
-
-  if (categoryIds) {
-    query = query.in('category_id', categoryIds)
-  }
-
-  if (marque) {
-    query = query.ilike('brand', marque)
-  }
-
-  if (q?.trim()) {
-    // Full-text search on search_vector (French language)
-    query = query.textSearch('search_vector', q.trim(), {
-      type: 'websearch',
-      config: 'french',
+  // ── Charger les catégories principales ──────────────────────────
+  let mainCategories: CategoryDto[] = []
+  try {
+    const res = await apiClient.get<CategoryListResponse>('/categories', {
+      params: { limit: 100 },
+      headers,
     })
+    mainCategories = (res.data.data ?? []).filter((c) => !c.parent_id && c.is_active)
+  } catch {
+    // silencieux : la sidebar s'affichera sans catégories
   }
 
-  // Sort
-  if (tri === 'prix-asc')  query = query.order('price', { ascending: true })
-  else if (tri === 'prix-desc') query = query.order('price', { ascending: false })
-  else query = query.order('created_at', { ascending: false })
+  // ── Résoudre le filtre catégorie : slug → id ─────────────────────
+  let categoryId: string | undefined
+  if (categorie) {
+    const matched = mainCategories.find((c) => c.slug === categorie)
+    if (matched) categoryId = matched.id
+  }
 
-  // Pagination
-  query = query.range(offset, offset + PAGE_SIZE - 1)
+  // ── Charger les produits ─────────────────────────────────────────
+  let products: ProductDto[] = []
+  let total = 0
+  try {
+    const apiParams: Record<string, string | number> = {
+      page: currentPage,
+      limit: PAGE_SIZE,
+    }
+    if (q?.trim()) apiParams.search = q.trim()
+    if (categoryId) apiParams.categoryId = categoryId
 
-  const { data: products, count } = await query
+    const res = await apiClient.get<ProductListResponse>('/products', {
+      params: apiParams,
+      headers,
+    })
+    products = res.data.data ?? []
+    total = res.data.total ?? 0
+  } catch {
+    // silencieux
+  }
 
-  const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE)
+  const totalPages = Math.ceil(total / PAGE_SIZE)
 
-  // ── Brands for this category (for brand filter) ──────────────────
-  let brandsQuery = supabase
-    .from('products')
-    .select('brand')
-    .eq('is_active', true)
-    .not('brand', 'is', null)
-  if (categoryIds) brandsQuery = brandsQuery.in('category_id', categoryIds)
-  const { data: brandRows } = await brandsQuery
-  const brands = [...new Set(brandRows?.map((r) => r.brand).filter(Boolean))].sort()
+  // ── Marques uniques depuis les produits chargés ──────────────────
+  const brands = [
+    ...new Set(products.map((p) => p.brand).filter((b): b is string => Boolean(b))),
+  ].sort()
+
+  // Filtrage client par marque (l'API ne filtre pas par brand)
+  const filteredProducts = marque
+    ? products.filter((p) => p.brand?.toLowerCase() === marque.toLowerCase())
+    : products
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -114,18 +97,18 @@ export default async function BoutiquePage({ searchParams }: Props) {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">
           {categorie
-            ? (mainCategories?.find((c) => c.slug === categorie)?.name ?? 'Boutique')
+            ? (mainCategories.find((c) => c.slug === categorie)?.name ?? 'Boutique')
             : 'Boutique'}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {count ?? 0} produit{(count ?? 0) > 1 ? 's' : ''} disponible{(count ?? 0) > 1 ? 's' : ''}
+          {total} produit{total > 1 ? 's' : ''} disponible{total > 1 ? 's' : ''}
         </p>
       </div>
 
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* ── Sidebar ───────────────────────────────────────────── */}
         <aside className="w-full shrink-0 space-y-4 lg:w-64">
-          <CategoryFilter categories={mainCategories ?? []} current={categorie} />
+          <CategoryFilter categories={mainCategories} current={categorie} />
 
           {/* Brand filter */}
           {brands.length > 0 && (
@@ -137,7 +120,7 @@ export default async function BoutiquePage({ searchParams }: Props) {
                 {brands.map((b) => (
                   <li key={b}>
                     <Link
-                      href={`?${new URLSearchParams({ ...(categorie ? { categorie } : {}), ...(q ? { q } : {}), marque: marque === b ? '' : b! }).toString()}`}
+                      href={`?${new URLSearchParams({ ...(categorie ? { categorie } : {}), ...(q ? { q } : {}), marque: marque === b ? '' : b }).toString()}`}
                       className={`block rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-muted ${
                         marque === b ? 'bg-primary/10 font-medium text-primary' : 'text-foreground'
                       }`}
@@ -160,7 +143,7 @@ export default async function BoutiquePage({ searchParams }: Props) {
           </div>
 
           {/* Grid */}
-          {!products || products.length === 0 ? (
+          {filteredProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <p className="text-lg font-medium text-muted-foreground">Aucun produit trouvé.</p>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -173,17 +156,17 @@ export default async function BoutiquePage({ searchParams }: Props) {
           ) : (
             <>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                {products.map((product) => (
-                  <ProductCard key={product.id} product={product as any} />
+                {filteredProducts.map((product) => (
+                  <ProductCard key={product.id} product={product as never} />
                 ))}
               </div>
 
               {/* Pagination */}
               {totalPages > 1 && (
                 <div className="mt-10 flex flex-wrap justify-center gap-2">
-                  {Number(page) > 1 && (
+                  {currentPage > 1 && (
                     <a
-                      href={`?${new URLSearchParams({ ...params, page: String(Number(page) - 1) })}`}
+                      href={`?${new URLSearchParams({ ...params, page: String(currentPage - 1) })}`}
                       className="flex h-9 items-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted"
                     >
                       ← Précédent
@@ -196,7 +179,7 @@ export default async function BoutiquePage({ searchParams }: Props) {
                         key={p}
                         href={`?${new URLSearchParams({ ...params, page: String(p) })}`}
                         className={`flex h-9 w-9 items-center justify-center rounded-md border text-sm font-medium transition-colors ${
-                          p === Number(page)
+                          p === currentPage
                             ? 'border-primary bg-primary text-primary-foreground'
                             : 'hover:bg-muted'
                         }`}
@@ -206,9 +189,9 @@ export default async function BoutiquePage({ searchParams }: Props) {
                     )
                   })}
                   {totalPages > 7 && <span className="flex h-9 items-center px-2 text-muted-foreground">…</span>}
-                  {Number(page) < totalPages && (
+                  {currentPage < totalPages && (
                     <a
-                      href={`?${new URLSearchParams({ ...params, page: String(Number(page) + 1) })}`}
+                      href={`?${new URLSearchParams({ ...params, page: String(currentPage + 1) })}`}
                       className="flex h-9 items-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted"
                     >
                       Suivant →

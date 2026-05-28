@@ -1,11 +1,10 @@
 import type { MetadataRoute } from 'next'
-import { createClient } from '@/lib/supabase/server'
+import { productsApi } from '@/lib/api/products'
+import { categoriesApi } from '@/lib/api/categories'
 
 const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://chanoatech.com'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const supabase = await createClient()
-
   // Static pages
   const staticPages: MetadataRoute.Sitemap = [
     { url: BASE, changeFrequency: 'daily', priority: 1 },
@@ -21,31 +20,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ]
 
   // Dynamic product pages
-  const { data: products } = await supabase
-    .from('products')
-    .select('slug, updated_at')
-    .eq('is_active', true)
-    .order('updated_at', { ascending: false })
-    .limit(2000)
-
-  const productPages: MetadataRoute.Sitemap = (products ?? []).map((p) => ({
-    url: `${BASE}/boutique/${p.slug}`,
-    lastModified: p.updated_at,
-    changeFrequency: 'weekly' as const,
-    priority: 0.8,
-  }))
+  let productPages: MetadataRoute.Sitemap = []
+  try {
+    const result = await productsApi.getProducts({ limit: 2000 })
+    productPages = result.data.data.map((p) => ({
+      url: `${BASE}/boutique/${p.slug}`,
+      lastModified: p.updated_at,
+      changeFrequency: 'weekly' as const,
+      priority: 0.8,
+    }))
+  } catch {
+    // Si l'API est indisponible au moment du build, on génère le sitemap sans les produits
+  }
 
   // Dynamic category pages
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('slug')
-    .eq('is_active', true)
-
-  const categoryPages: MetadataRoute.Sitemap = (categories ?? []).map((c) => ({
-    url: `${BASE}/boutique?categorie=${c.slug}`,
-    changeFrequency: 'weekly' as const,
-    priority: 0.7,
-  }))
+  let categoryPages: MetadataRoute.Sitemap = []
+  try {
+    const result = await categoriesApi.getCategories({ limit: 500 })
+    categoryPages = result.data.data.map((c) => ({
+      url: `${BASE}/boutique?categorie=${c.slug}`,
+      changeFrequency: 'weekly' as const,
+      priority: 0.7,
+    }))
+  } catch {
+    // Silencieux
+  }
 
   return [...staticPages, ...productPages, ...categoryPages]
 }

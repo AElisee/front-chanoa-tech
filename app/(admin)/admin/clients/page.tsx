@@ -1,8 +1,13 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { Search, Users, Mail, Phone as PhoneIcon } from 'lucide-react'
-import { guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
+import { redirect } from 'next/navigation'
 import { formatFCFA } from '@/lib/utils/format'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { UserDto, UserListResponse } from '@/lib/api/users'
+import type { OrderDto, OrderListResponse } from '@/lib/api/orders'
 
 export const metadata: Metadata = { title: 'Clients — Admin' }
 
@@ -11,79 +16,72 @@ interface Props {
 }
 
 export default async function AdminClientsPage({ searchParams }: Props) {
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
   const { q } = await searchParams
-  const supabase = await guardAdmin()
 
-  // Load profiles and ALL orders (both authenticated and guest)
-  const [{ data: profiles }, { data: allOrders }] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('id, full_name, email, phone, created_at, role')
-      .neq('role', 'admin') // exclude admins, keep 'user' and null roles
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('orders')
-      .select('id, user_id, guest_email, shipping_address, total, status, created_at'),
-  ])
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
-  type Order = { id: string; user_id: string | null; guest_email: string | null; shipping_address: { email?: string } | null; total: number; status: string; created_at: string }
+  // Charger tous les clients via l'API NestJS
+  let allUsers: UserDto[] = []
+  try {
+    const res = await apiClient.get<UserListResponse>('/user', {
+      params: { limit: 500 },
+      headers,
+    })
+    allUsers = res.data?.data ?? []
+  } catch {
+    // silencieux
+  }
 
-  // Group orders by both user_id AND email (to catch guest orders)
-  const ordersByUser = new Map<string, Order[]>()
-  const ordersByEmail = new Map<string, Order[]>()
-  for (const o of (allOrders ?? []) as Order[]) {
+  // Charger toutes les commandes pour calculer les agrégats par client
+  let allOrders: OrderDto[] = []
+  try {
+    const res = await apiClient.get<OrderListResponse>('/orders', {
+      params: { limit: 1000 },
+      headers,
+    })
+    allOrders = res.data?.data ?? []
+  } catch {
+    // silencieux
+  }
+
+  const ordersByUser = new Map<string, OrderDto[]>()
+  for (const o of allOrders) {
     if (o.user_id) {
       const list = ordersByUser.get(o.user_id) ?? []
       list.push(o)
       ordersByUser.set(o.user_id, list)
     }
-    const emailKey = (o.guest_email ?? o.shipping_address?.email ?? '').toLowerCase()
-    if (emailKey) {
-      const list = ordersByEmail.get(emailKey) ?? []
-      list.push(o)
-      ordersByEmail.set(emailKey, list)
-    }
   }
 
-  type ClientRow = {
-    id: string
-    full_name: string | null
-    email: string
-    phone: string | null
-    created_at: string
-    orders: Order[]
-  }
+  type ClientRow = UserDto & { orders: OrderDto[] }
 
-  let clients: ClientRow[] = ((profiles ?? []) as Array<{
-    id: string; full_name: string | null; email: string; phone: string | null; created_at: string
-  }>).map((p) => {
-    // Merge: orders linked by user_id + guest orders matching this email
-    const byId = ordersByUser.get(p.id) ?? []
-    const byEmail = ordersByEmail.get(p.email.toLowerCase()) ?? []
-    // Deduplicate (same order could be both linked and guest)
-    const seen = new Set<string>()
-    const merged: Order[] = []
-    for (const o of [...byId, ...byEmail]) {
-      if (!seen.has(o.id)) { seen.add(o.id); merged.push(o) }
-    }
-    return { ...p, orders: merged }
-  })
+  let clients: ClientRow[] = allUsers
+    .filter((u) => u.role === 'user')
+    .map((u) => ({ ...u, orders: ordersByUser.get(u.id) ?? [] }))
 
   if (q) {
     const lower = q.toLowerCase()
     clients = clients.filter((c) =>
-      c.full_name?.toLowerCase().includes(lower) ||
+      c.name?.toLowerCase().includes(lower) ||
       c.email.toLowerCase().includes(lower) ||
       c.phone?.includes(lower)
     )
   }
 
-  // Sort: clients with orders first
   clients.sort((a, b) => b.orders.length - a.orders.length)
 
-  const totalClients = clients.length
+  const totalClients      = clients.length
   const clientsWithOrders = clients.filter((c) => c.orders.length > 0).length
-  const totalRevenue = clients.reduce((s, c) => s + c.orders.reduce((ss, o) => ss + Number(o.total), 0), 0)
+  const totalRevenue      = clients.reduce(
+    (s, c) => s + c.orders.reduce((ss, o) => ss + Number(o.total), 0),
+    0,
+  )
 
   return (
     <div className="space-y-6">
@@ -124,10 +122,10 @@ export default async function AdminClientsPage({ searchParams }: Props) {
           {clients.map((client) => {
             const orderCount = client.orders.length
             const totalSpent = client.orders.reduce((s, o) => s + Number(o.total), 0)
-            const lastOrder = client.orders.sort((a, b) =>
-              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            const lastOrder  = [...client.orders].sort(
+              (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
             )[0]
-            const initial = (client.full_name ?? client.email)[0].toUpperCase()
+            const initial = (client.name ?? client.email)[0].toUpperCase()
             return (
               <Link
                 key={client.id}
@@ -140,9 +138,9 @@ export default async function AdminClientsPage({ searchParams }: Props) {
                     {initial}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold">{client.full_name ?? 'Sans nom'}</p>
+                    <p className="truncate font-semibold">{client.name ?? 'Sans nom'}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      Inscrit le {new Date(client.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      Inscrit le {new Date(client.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </p>
                   </div>
                 </div>

@@ -2,7 +2,7 @@
  * scripts/import-products.ts
  *
  * Bulk product importer — supports both Excel (.xlsx) and CSV files.
- * Uses service role key — bypasses RLS — run locally only, never in production.
+ * Uses Admin JWT token — run locally only, never in production.
  * Upserts on slug → idempotent, safe to re-run.
  *
  * Usage:
@@ -11,7 +11,10 @@
  *   npx tsx scripts/import-products.ts --file produits.csv --limit=50
  *   npx tsx scripts/import-products.ts --file produits.csv --brand=Dell
  *   npx tsx scripts/import-products.ts --file produits.csv --overwrite
- *   npx tsx scripts/import-products.ts --file produits.csv --image-placeholder=./assets/placeholder.jpg
+ *
+ * Variables requises dans .env.local :
+ *   NEXT_PUBLIC_API_URL=http://localhost:3001
+ *   ADMIN_API_TOKEN=<token JWT admin>
  *
  * Excel columns: ID, SKU, Product Name, Category, Subcategory, Brand, Model,
  *               Description, Price EUR, Stock, Status,
@@ -21,20 +24,11 @@
  *   name,description,price,compare_price,stock,category_slug,brand,model,sku,image_url,
  *   variant_options,variant_sku
  *
- * Variant support:
- *   - Multiple rows with the same (name + brand + model) are grouped as variants of one product.
- *   - `variant_options` is a JSON string: {"ram":"16 Go","stockage":"512 Go SSD"}
- *   - `variant_sku` is the SKU specific to that configuration (optional).
- *   - `price` on a variant row is the variant-specific price (overrides parent price).
- *   - `stock` on a variant row is the variant-specific stock.
- *   - Parent product price = lowest variant price. Parent stock = 0 (derived from variants).
- *
  * Currency: XLSX prices stored as FCFA (Price EUR × 655.957) + price_eur kept as reference
  *           CSV prices already in FCFA
  */
 
 import * as XLSX from 'xlsx'
-import { createClient } from '@supabase/supabase-js'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as dotenv from 'dotenv'
@@ -45,21 +39,22 @@ dotenv.config({ path: '.env.local' })
 
 const EUR_TO_FCFA = 655.957
 
-// ─── Supabase client (service role — bypasses RLS) ───────────────────────────
+// ─── API client ──────────────────────────────────────────────────────────────
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const API_URL     = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+const ADMIN_TOKEN = process.env.ADMIN_API_TOKEN
 
-if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-  console.error('\n❌ Variables manquantes dans .env.local :')
-  console.error('   NEXT_PUBLIC_SUPABASE_URL')
-  console.error('   SUPABASE_SERVICE_ROLE_KEY\n')
+if (!API_URL) {
+  console.error('\n❌ NEXT_PUBLIC_API_URL manquant dans .env.local\n')
   process.exit(1)
 }
 
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-  auth: { persistSession: false },
-})
+function authHeaders(): HeadersInit {
+  return {
+    'Content-Type': 'application/json',
+    ...(ADMIN_TOKEN ? { Authorization: `Bearer ${ADMIN_TOKEN}` } : {}),
+  }
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -75,17 +70,17 @@ interface ExcelRow {
   'Price EUR'?:        number
   'Stock'?:            number
   'Status'?:           string
-  'Variant Options'?:  string  // JSON: {"ram":"16 Go","stockage":"512 Go"}
+  'Variant Options'?:  string
   'Variant SKU'?:      string
   [key: string]:       unknown
 }
 
 interface ParsedVariant {
-  sku:     string | null
-  options: Record<string, string>
-  price:   number
+  sku:       string | null
+  options:   Record<string, string>
+  price:     number
   price_eur: number | null
-  stock:   number
+  stock:     number
 }
 
 interface ParsedProduct {
@@ -98,11 +93,11 @@ interface ParsedProduct {
   subcategoryName: string | null
   description:     string | null
   price_eur:       number
-  price:           number  // FCFA
+  price:           number
   stock:           number
   status:          string
   is_active:       boolean
-  variants:        ParsedVariant[]  // empty = simple product, non-empty = has variants
+  variants:        ParsedVariant[]
 }
 
 interface ImportResult {
@@ -116,7 +111,7 @@ interface ImportResult {
 function slugify(text: string): string {
   return text
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s-]/g, '')
@@ -129,7 +124,7 @@ function eurToFcfa(eur: number): number {
   return Math.round(eur * EUR_TO_FCFA)
 }
 
-// ─── Category cache (name → id) ───────────────────────────────────────────────
+// ─── Category cache ───────────────────────────────────────────────────────────
 
 const categoryCache = new Map<string, string>()
 
@@ -139,35 +134,32 @@ async function getCategoryId(name: string, parentId?: string): Promise<string | 
 
   const slug = slugify(name)
 
-  const { data: existing } = await supabase
-    .from('categories')
-    .select('id')
-    .eq('slug', slug)
-    .single()
-
-  if (existing) {
-    categoryCache.set(cacheKey, existing.id)
-    return existing.id
+  // Chercher par slug
+  const searchRes = await fetch(`${API_URL}/categories?slug=${encodeURIComponent(slug)}`, {
+    headers: authHeaders(),
+  })
+  if (searchRes.ok) {
+    const body = await searchRes.json() as { data: Array<{ id: string; slug: string }> }
+    const found = body.data?.find((c) => c.slug === slug)
+    if (found) {
+      categoryCache.set(cacheKey, found.id)
+      return found.id
+    }
   }
 
-  // Should already exist from migration 002, but create as fallback
-  const { data: created, error } = await supabase
-    .from('categories')
-    .insert({
-      name,
-      slug,
-      is_active: true,
-      sort_order: 0,
-      parent_id: parentId ?? null,
-    })
-    .select('id')
-    .single()
+  // Créer si inexistante
+  const createRes = await fetch(`${API_URL}/categories`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ name, slug, is_active: true, sort_order: 0, parent_id: parentId ?? null }),
+  })
 
-  if (error || !created) {
-    console.warn(`   ⚠️  Catégorie "${name}" introuvable et non créée : ${error?.message}`)
+  if (!createRes.ok) {
+    console.warn(`   ⚠️  Catégorie "${name}" introuvable et non créée`)
     return null
   }
 
+  const created = await createRes.json() as { id: string }
   console.log(`   ✅ Catégorie créée : "${name}"`)
   categoryCache.set(cacheKey, created.id)
   return created.id
@@ -184,20 +176,22 @@ async function uniqueSlug(name: string, sku: string): Promise<string> {
 
   while (true) {
     if (!usedSlugs.has(candidate)) {
-      // Also check DB
-      const { data } = await supabase
-        .from('products')
-        .select('id')
-        .eq('slug', candidate)
-        .single()
-
-      if (!data) {
+      const res = await fetch(`${API_URL}/products?slug=${encodeURIComponent(candidate)}`, {
+        headers: authHeaders(),
+      })
+      if (res.ok) {
+        const body = await res.json() as { data: unknown[] }
+        if (!body.data || body.data.length === 0) {
+          usedSlugs.add(candidate)
+          return candidate
+        }
+      } else {
+        // En cas d'erreur API, on utilise le candidat quand même
         usedSlugs.add(candidate)
         return candidate
       }
     }
     attempt++
-    // After first collision, use sku suffix for determinism
     candidate = attempt === 1 ? `${base}-${slugify(sku)}` : `${base}-${attempt}`
   }
 }
@@ -217,25 +211,20 @@ function parseExcel(filePath: string): ParsedProduct[] {
 
   rows.forEach((row, i) => {
     const rowNum = i + 2
-
-    const name = row['Product Name']?.trim()
+    const name     = row['Product Name']?.trim()
     const priceEur = row['Price EUR']
-    const sku = row['SKU']?.trim()
+    const sku      = row['SKU']?.trim()
 
-    if (!name) {
-      parseErrors.push(`Ligne ${rowNum}: "Product Name" manquant`)
-      return
-    }
+    if (!name) { parseErrors.push(`Ligne ${rowNum}: "Product Name" manquant`); return }
     if (priceEur == null || isNaN(priceEur) || priceEur < 0) {
-      parseErrors.push(`Ligne ${rowNum}: "Price EUR" invalide (${priceEur})`)
-      return
+      parseErrors.push(`Ligne ${rowNum}: "Price EUR" invalide (${priceEur})`); return
     }
 
     const statusRaw = (row['Status'] ?? 'Active').toString().toLowerCase()
     const is_active = ['active', 'actif', '1', 'true'].includes(statusRaw)
 
     const variantOptions = parseVariantOptions(row['Variant Options'] as string | null)
-    const variantSku = (row['Variant SKU'] as string | null)?.trim() || null
+    const variantSku     = (row['Variant SKU'] as string | null)?.trim() || null
     const variantRow: ParsedVariant | null = variantOptions ? {
       sku:       variantSku,
       options:   variantOptions,
@@ -244,12 +233,8 @@ function parseExcel(filePath: string): ParsedProduct[] {
       stock:     typeof row['Stock'] === 'number' ? Math.max(0, row['Stock']) : 0,
     } : null
 
-    // Group rows by (name + brand + model) — if same key already in list, add as variant
     const groupKey = `${name}||${row['Brand']?.trim() ?? ''}||${row['Model']?.trim() ?? ''}`
-    const existing = products.find(p => {
-      const k = `${p.name}||${p.brand ?? ''}||${p.model ?? ''}`
-      return k === groupKey
-    })
+    const existing = products.find(p => `${p.name}||${p.brand ?? ''}||${p.model ?? ''}` === groupKey)
 
     if (existing && variantRow) {
       existing.variants.push(variantRow)
@@ -282,8 +267,6 @@ function parseExcel(filePath: string): ParsedProduct[] {
   return products
 }
 
-// ─── Parse variant options JSON safely ───────────────────────────────────────
-
 function parseVariantOptions(raw: string | null | undefined): Record<string, string> | null {
   if (!raw?.trim()) return null
   try {
@@ -291,63 +274,45 @@ function parseVariantOptions(raw: string | null | undefined): Record<string, str
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
       return parsed as Record<string, string>
     }
-  } catch {
-    // not valid JSON — ignore
-  }
+  } catch { /* not valid JSON */ }
   return null
 }
 
-// ─── Upsert variants for a product ───────────────────────────────────────────
+// ─── Upsert variants ──────────────────────────────────────────────────────────
 
 async function upsertVariants(productId: string, variants: ParsedVariant[]): Promise<void> {
   if (variants.length === 0) return
-  const rows = variants.map((v, i) => ({
-    product_id:    productId,
-    sku:           v.sku,
-    options:       v.options,
-    price:         v.price,
-    price_eur:     v.price_eur,
-    stock:         v.stock,
-    is_active:     true,
-    sort_order:    i,
-  }))
-
-  // Upsert on sku where available, otherwise insert (no dedup possible without sku)
-  const withSku    = rows.filter(r => r.sku)
-  const withoutSku = rows.filter(r => !r.sku)
-
-  if (withSku.length > 0) {
-    await supabase.from('product_variants').upsert(withSku, { onConflict: 'sku' })
-  }
-  if (withoutSku.length > 0) {
-    // Re-running without sku will create duplicates — warn instead of inserting blindly
-    console.warn(`   ⚠️  ${withoutSku.length} variant(s) sans SKU ignoré(s) (non idempotent sans sku)`)
+  for (const v of variants) {
+    await fetch(`${API_URL}/products/${productId}/variants`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        sku:       v.sku,
+        options:   v.options,
+        price:     v.price,
+        price_eur: v.price_eur,
+        stock:     v.stock,
+        is_active: true,
+      }),
+    })
   }
 }
 
 // ─── Import ───────────────────────────────────────────────────────────────────
 
-async function importProducts(
-  products: ParsedProduct[],
-  dryRun: boolean
-): Promise<ImportResult> {
+async function importProducts(products: ParsedProduct[], dryRun: boolean): Promise<ImportResult> {
   const result: ImportResult = { success: 0, skipped: 0, errors: [] }
   const total = products.length
 
   for (let i = 0; i < products.length; i++) {
-    const p = products[i]
+    const p        = products[i]
     const progress = `[${i + 1}/${total}]`
 
-    // Resolve category + subcategory
     let category_id: string | null = null
     let subcategory_id: string | null = null
 
-    if (p.categoryName) {
-      category_id = await getCategoryId(p.categoryName)
-    }
-    if (p.subcategoryName && category_id) {
-      subcategory_id = await getCategoryId(p.subcategoryName, category_id)
-    }
+    if (p.categoryName)                        category_id    = await getCategoryId(p.categoryName)
+    if (p.subcategoryName && category_id)      subcategory_id = await getCategoryId(p.subcategoryName, category_id)
 
     const final_category_id = subcategory_id ?? category_id
 
@@ -355,10 +320,7 @@ async function importProducts(
       ? slugify(p.name) + '-dry'
       : await uniqueSlug(p.name, p.sku)
 
-    // For products with variants: price = lowest variant price, stock = 0 (variants own the stock)
-    const effectivePrice = p.variants.length > 0
-      ? Math.min(...p.variants.map(v => v.price))
-      : p.price
+    const effectivePrice = p.variants.length > 0 ? Math.min(...p.variants.map(v => v.price)) : p.price
     const effectiveStock = p.variants.length > 0 ? 0 : p.stock
 
     const payload = {
@@ -392,25 +354,26 @@ async function importProducts(
       continue
     }
 
-    // Upsert product on slug — idempotent, safe to re-run
-    const { data: upserted, error } = await supabase
-      .from('products')
-      .upsert(payload, { onConflict: 'slug' })
-      .select('id')
-      .single()
+    // Upsert via POST /products (l'API NestJS gère le conflit sur slug)
+    const res = await fetch(`${API_URL}/products`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(payload),
+    })
 
-    if (error || !upserted) {
-      process.stdout.write(`  ${progress} ❌ "${p.name}": ${error?.message}\n`)
-      result.errors.push({ row: p.rowIndex, name: p.name, error: error?.message ?? 'no data' })
+    if (!res.ok) {
+      const text = await res.text()
+      process.stdout.write(`  ${progress} ❌ "${p.name}": ${text}\n`)
+      result.errors.push({ row: p.rowIndex, name: p.name, error: text })
       continue
     }
 
-    // Upsert variants if any
+    const upserted = await res.json() as { id: string }
+
     if (p.variants.length > 0) {
       await upsertVariants(upserted.id, p.variants)
     }
 
-    // Progress dot every 50 products, full line every 250
     if ((i + 1) % 250 === 0) {
       process.stdout.write(`\n  ✅ ${i + 1}/${total} produits importés\n`)
     } else if ((i + 1) % 50 === 0) {
@@ -422,9 +385,8 @@ async function importProducts(
   return result
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── CSV parser ───────────────────────────────────────────────────────────────
 
-/** Parse simple CSV with quoted-field support */
 function parseCsv(content: string): Array<Record<string, string>> {
   const lines = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(Boolean)
   if (lines.length < 2) return []
@@ -457,25 +419,22 @@ function parseCsv(content: string): Array<Record<string, string>> {
   })
 }
 
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
 async function main() {
-  const args = process.argv.slice(2)
-  const flag = (name: string) => args.find(a => a.startsWith(`--${name}`))?.split('=')[1] ?? null
-  const hasFlag = (name: string) => args.some(a => a === `--${name}`)
+  const args       = process.argv.slice(2)
+  const flag       = (name: string) => args.find(a => a.startsWith(`--${name}`))?.split('=')[1] ?? null
+  const hasFlag    = (name: string) => args.some(a => a === `--${name}`)
 
-  const dryRun     = hasFlag('dry-run')
-  const overwrite  = hasFlag('overwrite')
+  const dryRun      = hasFlag('dry-run')
   const brandFilter = flag('brand')
-  const limitArg   = flag('limit')
-  const limit      = limitArg ? parseInt(limitArg, 10) : Infinity
+  const limitArg    = flag('limit')
+  const limit       = limitArg ? parseInt(limitArg, 10) : Infinity
   const placeholder = flag('image-placeholder')
-
-  // --file flag or positional argument
-  const filePath = flag('file') ?? args.find(a => !a.startsWith('--'))
+  const filePath    = flag('file') ?? args.find(a => !a.startsWith('--'))
 
   if (!filePath) {
-    console.error(
-      '\nUsage: npx tsx scripts/import-products.ts --file produits.csv [--dry-run] [--limit=N] [--brand=Dell] [--overwrite]\n'
-    )
+    console.error('\nUsage: npx tsx scripts/import-products.ts --file produits.csv [--dry-run] [--limit=N]\n')
     process.exit(1)
   }
 
@@ -497,20 +456,20 @@ async function main() {
   let products: ParsedProduct[]
 
   if (ext === '.csv') {
-    // ── CSV path ──────────────────────────────────────────────────────────────
-    const raw = fs.readFileSync(resolved, 'utf-8')
+    const raw  = fs.readFileSync(resolved, 'utf-8')
     const rows = parseCsv(raw)
     console.log(`📄 CSV — ${rows.length} lignes lues`)
 
-    // Load category map slug→id for CSV
-    const { data: categories } = await supabase.from('categories').select('id, slug')
-    const catMap = new Map<string, string>((categories ?? []).map((c: { id: string; slug: string }) => [c.slug, c.id]))
+    // Charger les catégories pour le mapping slug→id
+    const catRes = await fetch(`${API_URL}/categories?limit=500`, { headers: authHeaders() })
+    const catBody = catRes.ok ? await catRes.json() as { data: Array<{ id: string; slug: string }> } : { data: [] }
+    const catMap = new Map<string, string>((catBody.data ?? []).map((c) => [c.slug, c.id]))
 
     products = rows
       .filter((r) => r.name?.trim())
       .map((row, i) => {
-        const price = parseFloat(row.price?.replace(/\s/g, '') ?? '0')
-        const imageUrl = row.image_url?.trim() || (placeholder ?? null)
+        const price          = parseFloat(row.price?.replace(/\s/g, '') ?? '0')
+        const imageUrl       = row.image_url?.trim() || (placeholder ?? null)
         const variantOptions = parseVariantOptions(row.variant_options)
         const variantRow: ParsedVariant | null = variantOptions ? {
           sku:       row.variant_sku?.trim() || null,
@@ -540,11 +499,10 @@ async function main() {
         }
       })
       .filter((p) => p.price > 0)
-      // Group CSV rows by (name + brand + model) for variant merging
       .reduce((acc: ParsedProduct[], cur) => {
         const groupKey = `${cur.name}||${cur.brand ?? ''}||${cur.model ?? ''}`
         const existing = acc.find(p => `${p.name}||${p.brand ?? ''}||${p.model ?? ''}` === groupKey)
-        const variant = (cur as unknown as { variants: ParsedVariant[] }).variants[0]
+        const variant  = (cur as unknown as { variants: ParsedVariant[] }).variants[0]
         if (existing && variant) {
           existing.variants.push(variant)
         } else {
@@ -553,11 +511,9 @@ async function main() {
         return acc
       }, []) as ParsedProduct[]
   } else {
-    // ── XLSX path (existing behaviour) ───────────────────────────────────────
     products = parseExcel(resolved)
   }
 
-  // Apply brand filter
   if (brandFilter) {
     products = products.filter((p) => p.brand?.toLowerCase() === brandFilter.toLowerCase())
     console.log(`   → ${products.length} après filtre brand="${brandFilter}"`)
@@ -576,7 +532,7 @@ async function main() {
   console.log(`📦 ${products.length} produit(s) à traiter\n`)
 
   const started = Date.now()
-  const result = await importProducts(products, dryRun)
+  const result  = await importProducts(products, dryRun)
   const elapsed = ((Date.now() - started) / 1000).toFixed(1)
 
   console.log('\n\n─────────────────────────────────────────')
@@ -592,10 +548,7 @@ async function main() {
     )
   }
 
-  if (dryRun) {
-    console.log('\n💡 Dry-run OK. Relancez sans --dry-run pour importer.')
-  }
-
+  if (dryRun) console.log('\n💡 Dry-run OK. Relancez sans --dry-run pour importer.')
   console.log('')
 }
 

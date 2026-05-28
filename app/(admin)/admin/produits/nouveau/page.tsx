@@ -1,9 +1,13 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { ChevronRight, XCircle } from 'lucide-react'
-import { guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
+import { redirect } from 'next/navigation'
 import { createProduct } from './actions'
 import ImageUploader from '@/components/admin/ImageUploader'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
 
 export const metadata: Metadata = { title: 'Nouveau produit — Admin' }
 
@@ -12,17 +16,29 @@ interface Props {
 }
 
 export default async function AdminProduitNewPage({ searchParams }: Props) {
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
   const { error } = await searchParams
-  const supabase = await guardAdmin()
 
-  const { data: allCategories } = await supabase
-    .from('categories')
-    .select('id, name, slug, parent_id')
-    .eq('is_active', true)
-    .order('sort_order')
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
-  const mainCats = allCategories?.filter((c) => !c.parent_id) ?? []
-  const subCats = allCategories?.filter((c) => c.parent_id) ?? []
+  let allCategories: CategoryDto[] = []
+  try {
+    const res = await apiClient.get<CategoryListResponse>('/categories', {
+      params: { limit: 200 },
+      headers,
+    })
+    allCategories = res.data.data ?? []
+  } catch {
+    // silencieux
+  }
+
+  const mainCats = allCategories.filter((c) => !c.parent_id)
+  const subCats = allCategories.filter((c) => c.parent_id)
 
   return (
     <div className="mx-auto max-w-3xl">

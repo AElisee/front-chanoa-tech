@@ -1,4 +1,4 @@
-import type { OrderStatus } from '@/lib/supabase/types'
+import type { OrderStatus } from '@/lib/api/orders'
 
 const config: Record<OrderStatus, { label: string; bg: string; text: string; dot: string }> = {
   pending:    { label: 'En attente',      bg: 'bg-amber-50',   text: 'text-amber-700',  dot: 'bg-amber-500' },
@@ -7,6 +7,7 @@ const config: Record<OrderStatus, { label: string; bg: string; text: string; dot
   shipped:    { label: 'Expédiée',        bg: 'bg-indigo-50',  text: 'text-indigo-700', dot: 'bg-indigo-500' },
   delivered:  { label: 'Livrée',          bg: 'bg-green-50',   text: 'text-green-700',  dot: 'bg-green-600' },
   cancelled:  { label: 'Annulée',         bg: 'bg-red-50',     text: 'text-red-700',    dot: 'bg-red-500' },
+  refunded:   { label: 'Remboursée',      bg: 'bg-gray-50',    text: 'text-gray-700',   dot: 'bg-gray-500' },
 }
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Package,
@@ -14,7 +14,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { createClient } from '@/lib/supabase/client'
+import { authApi } from '@/lib/api/auth'
 
 const links = [
   { href: '/admin',             label: 'Dashboard',   icon: LayoutDashboard, exact: true },
@@ -27,6 +27,16 @@ const links = [
 
 export default function AdminSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+
+  async function handleLogout() {
+    try {
+      await authApi.logout()
+    } catch {
+      // Ignorer les erreurs réseau — la déconnexion côté client suffit
+    }
+    router.push('/auth/login')
+  }
 
   return (
     <aside className="flex w-60 shrink-0 flex-col bg-linear-to-b from-[#0F3460] via-[#0D2B52] to-[#081B3C] text-white">
@@ -79,11 +89,8 @@ export default function AdminSidebar() {
           Voir la boutique
         </Link>
         <button
-          onClick={async () => {
-            const supabase = createClient()
-            await supabase.auth.signOut()
-            window.location.href = '/auth/login'
-          }}
+          onClick={handleLogout}
+          aria-label="Se déconnecter"
           className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
         >
           <LogOut className="h-3.5 w-3.5" />

@@ -5,31 +5,30 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/lib/hooks/useAuth'
 import { toast } from 'sonner'
+import { AxiosError } from 'axios'
 
 export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
+  const { forgotPassword } = useAuth()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
     const data = new FormData(e.currentTarget)
-    const supabase = createClient()
 
-    const { error } = await supabase.auth.resetPasswordForEmail(
-      data.get('email') as string,
-      { redirectTo: `${window.location.origin}/auth/update-password` }
-    )
-
-    if (error) {
-      toast.error(error.message)
+    try {
+      await forgotPassword(data.get('email') as string)
+      setSent(true)
+    } catch (err) {
+      const axiosErr = err as AxiosError<{ message?: string }>
+      const message =
+        axiosErr.response?.data?.message ?? 'Une erreur est survenue.'
+      toast.error(message)
       setLoading(false)
-      return
     }
-
-    setSent(true)
   }
 
   if (sent) {

@@ -1,0 +1,66 @@
+import { apiClient } from './client'
+
+// ── DTOs ──────────────────────────────────────────────────────────────────────
+
+export interface CategoryDto {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  image_url: string | null
+  parent_id: string | null
+  is_active: boolean
+  sort_order: number
+  created_at: string
+}
+
+export interface CategoryListResponse {
+  data: CategoryDto[]
+  total: number
+  page: number
+  limit: number
+}
+
+export interface GetCategoriesParams {
+  page?: number
+  limit?: number
+}
+
+export interface CreateCategoryDto {
+  name: string
+  slug?: string
+  description?: string | null
+  image_url?: string | null
+  parent_id?: string | null
+  is_active?: boolean
+  sort_order?: number
+}
+
+export interface UpdateCategoryDto {
+  name?: string
+  slug?: string
+  description?: string | null
+  image_url?: string | null
+  parent_id?: string | null
+  is_active?: boolean
+  sort_order?: number
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+
+export const categoriesApi = {
+  getCategories: (params?: GetCategoriesParams) =>
+    apiClient.get<CategoryListResponse>('/categories', { params }),
+
+  getCategory: (id: string) =>
+    apiClient.get<CategoryDto>(`/categories/${id}`),
+
+  createCategory: (data: CreateCategoryDto) =>
+    apiClient.post<CategoryDto>('/categories', data),
+
+  updateCategory: (id: string, data: UpdateCategoryDto) =>
+    apiClient.patch<CategoryDto>(`/categories/${id}`, data),
+
+  deleteCategory: (id: string) =>
+    apiClient.delete<void>(`/categories/${id}`),
+}

@@ -1,10 +1,15 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { ArrowLeft, Mail, Phone, Calendar, ShoppingBag } from 'lucide-react'
-import { guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
+import { redirect } from 'next/navigation'
 import { formatFCFA } from '@/lib/utils/format'
 import { OrderStatusBadge } from '@/components/store/OrderStatusBadge'
-import type { OrderStatus } from '@/lib/supabase/types'
+import type { OrderStatus } from '@/lib/api/orders'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { UserDto } from '@/lib/api/users'
+import type { OrderDto, OrderListResponse } from '@/lib/api/orders'
 
 export const metadata: Metadata = { title: 'Profil client — Admin' }
 
@@ -13,10 +18,24 @@ interface Props {
 }
 
 export default async function AdminClientDetailPage({ params }: Props) {
-  const { id } = await params
-  const supabase = await guardAdmin()
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
 
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', id).single()
+  const { id } = await params
+
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
+
+  // Charger le profil client
+  let profile: UserDto | null = null
+  try {
+    const res = await apiClient.get<UserDto>(`/user/${id}`, { headers })
+    profile = res.data
+  } catch {
+    // silencieux
+  }
 
   if (!profile) {
     return (
@@ -27,40 +46,34 @@ export default async function AdminClientDetailPage({ params }: Props) {
     )
   }
 
-  // Load orders: both linked (user_id) AND guest orders matching this email
-  const { data: ordersByUser } = await supabase
-    .from('orders')
-    .select('id, status, total, created_at, user_id, guest_email, shipping_address')
-    .eq('user_id', id)
-    .order('created_at', { ascending: false })
-
-  const { data: ordersByEmailRaw } = profile.email ? await supabase
-    .from('orders')
-    .select('id, status, total, created_at, user_id, guest_email, shipping_address')
-    .ilike('guest_email', profile.email)
-    .is('user_id', null)
-    .order('created_at', { ascending: false }) : { data: null as null }
-
-  type OrderRow = { id: string; status: string; total: number; created_at: string; user_id: string | null; guest_email: string | null; shipping_address: { email?: string } | null }
-  const seen = new Set<string>()
-  const orderList: OrderRow[] = []
-  for (const o of [...((ordersByUser ?? []) as OrderRow[]), ...((ordersByEmailRaw ?? []) as OrderRow[])]) {
-    if (!seen.has(o.id)) { seen.add(o.id); orderList.push(o) }
+  // Charger les commandes de ce client
+  let orderList: OrderDto[] = []
+  try {
+    const res = await apiClient.get<OrderListResponse>('/orders', {
+      params: { userId: id, limit: 200 },
+      headers,
+    })
+    const allOrders = res.data?.data ?? []
+    // Filtrer côté client si le backend ne supporte pas le param userId
+    const seen = new Set<string>()
+    for (const o of allOrders) {
+      if (!seen.has(o.id) && o.user_id === id) {
+        seen.add(o.id)
+        orderList.push(o)
+      }
+    }
+    orderList.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  } catch {
+    // silencieux
   }
-  orderList.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
   const totalSpent = orderList.reduce((s, o) => s + Number(o.total), 0)
 
-  // Load item counts per order (separate query since join fails with service role)
-  const orderIds = orderList.map((o) => o.id)
+  // Calculer le nombre d'articles par commande depuis order_items inclus dans la réponse
   const itemCounts = new Map<string, number>()
-  if (orderIds.length > 0) {
-    const { data: items } = await supabase
-      .from('order_items')
-      .select('order_id')
-      .in('order_id', orderIds)
-    for (const it of (items ?? []) as { order_id: string }[]) {
-      itemCounts.set(it.order_id, (itemCounts.get(it.order_id) ?? 0) + 1)
-    }
+  for (const o of orderList) {
+    const n = o.order_items?.length ?? 0
+    if (n > 0) itemCounts.set(o.id, n)
   }
 
   return (
@@ -69,7 +82,7 @@ export default async function AdminClientDetailPage({ params }: Props) {
         <Link href="/admin/clients" className="rounded-md border p-1.5 hover:bg-muted">
           <ArrowLeft className="h-4 w-4" />
         </Link>
-        <h1 className="text-xl font-bold">{profile.full_name ?? profile.email}</h1>
+        <h1 className="text-xl font-bold">{profile.name ?? profile.email}</h1>
         {profile.role === 'admin' && (
           <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">Admin</span>
         )}
@@ -83,8 +96,8 @@ export default async function AdminClientDetailPage({ params }: Props) {
               <h2 className="font-semibold">Informations</h2>
             </div>
             <div className="space-y-3 px-5 py-4 text-sm">
-              {profile.full_name && (
-                <p className="font-medium text-base">{profile.full_name}</p>
+              {profile.name && (
+                <p className="font-medium text-base">{profile.name}</p>
               )}
               <a href={`mailto:${profile.email}`} className="flex items-center gap-2 text-muted-foreground hover:text-primary">
                 <Mail className="h-4 w-4 shrink-0" />
@@ -98,7 +111,7 @@ export default async function AdminClientDetailPage({ params }: Props) {
               )}
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Calendar className="h-4 w-4 shrink-0" />
-                Inscrit le {new Date(profile.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                Inscrit le {new Date(profile.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
               </div>
             </div>
 

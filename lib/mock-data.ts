@@ -3,8 +3,10 @@
  * À remplacer par les appels Supabase une fois la base configurée.
  */
 
-import type { ProductWithCategory, OrderWithItems } from '@/lib/supabase/query-types'
-import type { OrderStatus } from '@/lib/supabase/types'
+import type { OrderStatus } from '@/lib/api/orders'
+
+type ProductWithCategory = Record<string, unknown> & { id: string; name: string; stock: number; is_active: boolean }
+type OrderWithItems = Record<string, unknown> & { id: string; status: OrderStatus; total: number }
 
 // ─── Catégories ──────────────────────────────────────────────────────────────
 

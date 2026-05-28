@@ -16,7 +16,6 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { useCart } from '@/lib/hooks/useCart'
 import { useCurrency } from '@/lib/hooks/useCurrency'
-import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
 const categories = [
@@ -63,14 +62,14 @@ export default function Header() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // Detect admin role
+  // Detect admin role via JWT cookie decoded on the server
   useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      supabase.from('profiles').select('role').eq('id', user.id).single()
-        .then(({ data }) => { if (data?.role === 'admin') setIsAdmin(true) })
-    })
+    fetch('/api/auth/me')
+      .then(res => res.ok ? res.json() : null)
+      .then((data: { role?: string } | null) => {
+        if (data?.role === 'admin') setIsAdmin(true)
+      })
+      .catch(() => { /* non authentifié */ })
   }, [pathname])
 
   function handleSearch(e: React.FormEvent) {

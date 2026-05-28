@@ -1,8 +1,12 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { ArrowLeft, Trash2 } from 'lucide-react'
-import { guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
+import { redirect } from 'next/navigation'
 import { updateCategory, deleteCategory } from '../actions'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
 
 export const metadata: Metadata = { title: 'Modifier catégorie — Admin' }
 
@@ -12,14 +16,30 @@ interface Props {
 }
 
 export default async function EditCategoryPage({ params, searchParams }: Props) {
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
   const { id } = await params
   const { success, error } = await searchParams
-  const supabase = await guardAdmin()
 
-  const [{ data: category }, { data: parents }] = await Promise.all([
-    supabase.from('categories').select('*').eq('id', id).single(),
-    supabase.from('categories').select('id, name').is('parent_id', null).order('name'),
-  ])
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
+
+  let category: CategoryDto | null = null
+  let allParents: CategoryDto[] = []
+
+  try {
+    const [catRes, parentsRes] = await Promise.all([
+      apiClient.get<CategoryDto>(`/categories/${id}`, { headers }),
+      apiClient.get<CategoryListResponse>('/categories', { params: { limit: 100 }, headers }),
+    ])
+    category = catRes.data
+    allParents = (parentsRes.data.data ?? []).filter((c) => !c.parent_id)
+  } catch {
+    // silencieux
+  }
 
   if (!category) {
     return (
@@ -88,15 +108,15 @@ export default async function EditCategoryPage({ params, searchParams }: Props) 
             className="w-full rounded-md border px-3 py-2 text-sm focus:border-primary focus:outline-none"
           >
             <option value="">— Catégorie principale —</option>
-            {(parents ?? [])
-              .filter((p: { id: string }) => p.id !== id)
-              .map((p: { id: string; name: string }) => (
+            {allParents
+              .filter((p) => p.id !== id)
+              .map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
           </select>
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium">URL de l'image</label>
+          <label className="mb-1.5 block text-sm font-medium">URL de l&apos;image</label>
           <input
             name="image_url"
             type="url"
@@ -106,7 +126,7 @@ export default async function EditCategoryPage({ params, searchParams }: Props) 
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium">Ordre d'affichage</label>
+          <label className="mb-1.5 block text-sm font-medium">Ordre d&apos;affichage</label>
           <input
             name="sort_order"
             type="number"
@@ -134,7 +154,7 @@ export default async function EditCategoryPage({ params, searchParams }: Props) 
       {/* Danger zone */}
       <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-5">
         <p className="mb-1 text-sm font-semibold text-red-800">Zone dangereuse</p>
-        <p className="mb-3 text-xs text-red-700">La suppression est irréversible. Déplacez d'abord les produits de cette catégorie.</p>
+        <p className="mb-3 text-xs text-red-700">La suppression est irréversible. Déplacez d&apos;abord les produits de cette catégorie.</p>
         <form action={deleteWithId}>
           <button
             type="submit"

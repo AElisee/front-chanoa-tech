@@ -1,11 +1,16 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { ArrowLeft, Package, Truck, User, MapPin, FileText, Phone, Mail, CreditCard, Banknote } from 'lucide-react'
-import { guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
+import { redirect } from 'next/navigation'
 import { formatFCFA } from '@/lib/utils/format'
 import { OrderStatusBadge } from '@/components/store/OrderStatusBadge'
-import type { OrderStatus } from '@/lib/supabase/types'
+import type { OrderStatus } from '@/lib/api/orders'
 import { updateOrderStatus, updateTracking, updateOrderNotes } from './actions'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { OrderDto } from '@/lib/api/orders'
+import type { DeliveryDto } from '@/lib/api/deliveries'
 
 export const metadata: Metadata = { title: 'Détail commande — Admin' }
 
@@ -24,25 +29,34 @@ interface Props {
 }
 
 export default async function AdminCommandeDetailPage({ params, searchParams }: Props) {
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
   const { id } = await params
   const { success } = await searchParams
-  const supabase = await guardAdmin()
 
-  const { data: order } = await supabase
-    .from('orders')
-    .select(`
-      id, status, total, created_at, updated_at, shipping_address, notes, user_id, guest_email, payment_method,
-      order_items(id, quantity, unit_price, product_snapshot, product_id)
-    `)
-    .eq('id', id)
-    .single()
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
-  // Load delivery separately (service role doesn't do nested joins well)
-  const { data: deliveryRows } = await supabase
-    .from('deliveries')
-    .select('carrier, tracking_number, status, shipped_at, delivered_at')
-    .eq('order_id', id)
-    .limit(1)
+  // Charger la commande via l'API
+  let order: OrderDto | null = null
+  try {
+    const res = await apiClient.get<OrderDto>(`/orders/${id}`, { headers })
+    order = res.data
+  } catch {
+    // silencieux
+  }
+
+  // Charger les infos de livraison via l'API NestJS
+  let deliveryRows: Pick<DeliveryDto, 'carrier' | 'tracking_number' | 'status' | 'shipped_at' | 'delivered_at'>[] = []
+  try {
+    const res = await apiClient.get<DeliveryDto[]>(`/deliveries/commande/${id}`, { headers })
+    deliveryRows = res.data ?? []
+  } catch {
+    // silencieux — la livraison peut ne pas encore exister
+  }
 
   if (!order) {
     return (
@@ -54,12 +68,14 @@ export default async function AdminCommandeDetailPage({ params, searchParams }: 
   }
 
   type ItemRow = { id: string; quantity: number; unit_price: number; product_snapshot: { name: string; slug: string }; product_id: string | null }
-  type DeliveryRow = { carrier: string | null; tracking_number: string | null; status: string | null; shipped_at: string | null; delivered_at: string | null }
 
-  const items      = (order.order_items ?? []) as ItemRow[]
-  const delivery   = (deliveryRows?.[0] as DeliveryRow | undefined)
+  const items    = (order.order_items ?? []) as unknown as ItemRow[]
+  const delivery = deliveryRows[0] ?? null
   const addr       = order.shipping_address as { full_name?: string; email?: string; phone?: string; address?: string; city?: string } | null
   const shortId    = order.id.slice(0, 8).toUpperCase()
+
+  // payment_method pas dans OrderDto standard — on cast
+  const orderAny = order as OrderDto & { payment_method?: string }
 
   const clientName  = addr?.full_name ?? addr?.email ?? order.guest_email ?? 'Client invité'
   const clientEmail = addr?.email ?? order.guest_email ?? null
@@ -215,7 +231,7 @@ export default async function AdminCommandeDetailPage({ params, searchParams }: 
           {/* Payment method */}
           <div className="rounded-xl border bg-white shadow-sm">
             <div className="flex items-center gap-2 border-b px-5 py-3">
-              {order.payment_method === 'cash_on_delivery' ? (
+              {orderAny.payment_method === 'cash_on_delivery' ? (
                 <Banknote className="h-4 w-4 text-muted-foreground" />
               ) : (
                 <CreditCard className="h-4 w-4 text-muted-foreground" />
@@ -223,7 +239,7 @@ export default async function AdminCommandeDetailPage({ params, searchParams }: 
               <h2 className="font-semibold">Paiement</h2>
             </div>
             <div className="px-5 py-4 text-sm">
-              {order.payment_method === 'cash_on_delivery' ? (
+              {orderAny.payment_method === 'cash_on_delivery' ? (
                 <div>
                   <p className="font-medium">Paiement à la livraison</p>
                   <p className="mt-1 text-xs text-muted-foreground">

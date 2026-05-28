@@ -1,9 +1,11 @@
 'use server'
 
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { checkoutSchema } from '@/lib/schemas'
+import { apiClient } from '@/lib/api/client'
+import type { OrderDto } from '@/lib/api/orders'
+import type { InitiatePaymentResponse } from '@/lib/api/payment'
 
 export async function placeOrder(formData: FormData) {
   // ── Parse & validate form with Zod ───────────────────────────
@@ -32,178 +34,71 @@ export async function placeOrder(formData: FormData) {
 
   const { email, full_name, phone, address, city, notes, payment_method, cart: cartItems } = result.data
 
-  // ── Service role client — bypasses RLS ───────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  ) as any
+  // ── Récupérer le token JWT depuis les cookies ────────────────
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
 
-  // ── SECURITY: Re-validate prices from DB ─────────────────────
-  // Never trust client-sent prices — reload from products/variants
-  const productIds = [...new Set(cartItems.map((i) => i.id))]
-  const variantIds = [...new Set(cartItems.filter((i) => i.variantId).map((i) => i.variantId!))]
-
-  const [{ data: dbProducts }, { data: dbVariants }] = await Promise.all([
-    supabase.from('products').select('id, price, stock, is_active').in('id', productIds),
-    variantIds.length > 0
-      ? supabase.from('product_variants').select('id, product_id, price, stock, is_active').in('id', variantIds)
-      : Promise.resolve({ data: [] as { id: string; product_id: string; price: number; stock: number; is_active: boolean }[] }),
-  ])
-
-  type DbProduct = { id: string; price: number; stock: number; is_active: boolean }
-  type DbVariant = { id: string; product_id: string; price: number; stock: number; is_active: boolean }
-
-  const productMap = new Map<string, DbProduct>((dbProducts ?? []).map((p: DbProduct) => [p.id, p]))
-  const variantMap = new Map<string, DbVariant>((dbVariants ?? []).map((v: DbVariant) => [v.id, v]))
-
-  // Validate each cart item against real DB data
-  for (const item of cartItems) {
-    const product = productMap.get(item.id)
-    if (!product || !product.is_active) {
-      redirect('/checkout?error=product_unavailable')
-    }
-
-    if (item.variantId) {
-      const variant = variantMap.get(item.variantId)
-      if (!variant || !variant.is_active) {
-        redirect('/checkout?error=variant_unavailable')
-      }
-      // Use DB price, not client price
-      item.price = Number(variant.price)
-      if (variant.stock < item.quantity) {
-        redirect('/checkout?error=insufficient_stock')
-      }
-    } else {
-      // Use DB price, not client price
-      item.price = Number(product.price)
-      if (product.stock < item.quantity) {
-        redirect('/checkout?error=insufficient_stock')
-      }
-    }
-  }
-
-  const total = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  )
-
-  // ── Detect logged-in user ──────────────────────────────────────
-  let userId: string | null = null
+  // ── Créer la commande via l'API NestJS ───────────────────────
+  // La validation des prix et du stock est faite côté API (source de vérité)
+  let order: OrderDto | null = null
   try {
-    const authClient = await createClient()
-    const { data: { user } } = await authClient.auth.getUser()
-    if (user) userId = user.id
-  } catch { /* guest checkout — no user */ }
-
-  // ── Create order ─────────────────────────────────────────────
-  const DELIVERY_FEE = 1500
-  const orderPayload: Record<string, unknown> = {
-    user_id: userId,
-    total: total + DELIVERY_FEE,
-    shipping_address: { full_name, address: address ?? '', city, phone, email },
-    notes,
-    status: 'pending',
-    payment_method,
-  }
-
-  let order: { id: string } | null = null
-  let orderError: { message: string } | null = null
-
-  const res1 = await supabase
-    .from('orders')
-    .insert({ ...orderPayload, guest_email: email })
-    .select('id')
-    .single()
-
-  if (res1.error?.message?.includes("'guest_email'")) {
-    const res2 = await supabase
-      .from('orders')
-      .insert(orderPayload)
-      .select('id')
-      .single()
-    order = res2.data
-    orderError = res2.error
-  } else {
-    order = res1.data
-    orderError = res1.error
-  }
-
-  if (orderError || !order) {
-    console.error('Order creation error:', orderError)
+    const orderRes = await apiClient.post<OrderDto>(
+      '/commande',
+      {
+        items: cartItems.map((item) => ({
+          productId: item.id,
+          variantId: item.variantId ?? null,
+          quantity: item.quantity,
+        })),
+        shippingAddress: {
+          full_name: full_name ?? '',
+          address: address ?? '',
+          city,
+          country: 'CI',
+          phone,
+          email,
+        },
+        guestEmail: email ?? null,
+        notes: notes ?? null,
+        paymentMethod: payment_method,
+      },
+      { headers: authHeaders }
+    )
+    order = orderRes.data
+  } catch (err: unknown) {
+    console.error('Order creation error:', err)
     redirect('/checkout?error=order_failed')
   }
 
-  // ── Create order items ───────────────────────────────────────
-  // product_snapshot now includes variant info for invoice generation
-  const orderItems = cartItems.map((item) => ({
-    order_id: order.id,
-    product_id: item.id,
-    variant_id: item.variantId ?? null,
-    quantity: item.quantity,
-    unit_price: item.price,
-    product_snapshot: {
-      name: item.name,
-      price: item.price,
-      slug: item.slug,
-      ...(item.variantId && { variant_id: item.variantId }),
-      ...(item.variantLabel && { variant_label: item.variantLabel }),
-    },
-  }))
-
-  const { error: itemsError } = await supabase
-    .from('order_items')
-    .insert(orderItems)
-
-  if (itemsError) {
-    console.error('Order items error:', itemsError)
-    // Order was created — continue to payment anyway
+  if (!order) {
+    redirect('/checkout?error=order_failed')
   }
 
-  // ── Cash on delivery — skip online payment ──────────────────
+  // ── Paiement à la livraison — pas de redirection de paiement ─
   if (payment_method === 'cash_on_delivery') {
-    redirect(`/commande/${order.id}`)
+    redirect(`/commande/${order.id}?email=${encodeURIComponent(email ?? '')}`)
   }
 
-  // ── Initiate GeniusPay payment ──────────────────────────────
-  // IMPORTANT: redirect() must NOT be inside a try/catch (it throws NEXT_REDIRECT)
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  const paymentInitUrl = `${supabaseUrl}/functions/v1/payment-initiate`
-
-  let checkoutUrl: string | null = null
+  // ── Initier le paiement GeniusPay ────────────────────────────
+  // IMPORTANT : redirect() ne doit PAS être dans un try/catch (il lève NEXT_REDIRECT)
+  let paymentUrl: string | null = null
   try {
-    const payRes = await fetch(paymentInitUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseAnonKey}`,
-      },
-      body: JSON.stringify({
-        order_id: order.id,
-        amount: total,
-        customer_email: email,
-        customer_phone: phone,
-        customer_name: full_name ?? '',
-      }),
-    })
-
-    const payData = await payRes.json()
-
-    if (payRes.ok && payData.checkout_url) {
-      checkoutUrl = payData.checkout_url as string
-    } else {
-      console.error('Payment initiation failed:', payData)
-    }
-  } catch (err) {
+    const paymentRes = await apiClient.post<InitiatePaymentResponse>(
+      '/payment/initiate',
+      { orderId: order.id },
+      { headers: authHeaders }
+    )
+    paymentUrl = paymentRes.data.paymentUrl ?? null
+  } catch (err: unknown) {
     console.error('Payment initiation error:', err)
   }
 
-  // Redirect OUTSIDE try/catch so Next.js redirect() works properly
-  if (checkoutUrl) {
-    redirect(checkoutUrl)
+  // Redirection vers GeniusPay (ou fallback vers la page de confirmation)
+  if (paymentUrl) {
+    redirect(paymentUrl)
   }
 
-  // Fallback: redirect to order confirmation (payment can be retried)
-  redirect(`/commande/${order.id}`)
+  // Fallback : la commande est créée, le paiement peut être relancé
+  redirect(`/commande/${order.id}?email=${encodeURIComponent(email ?? '')}`)
 }

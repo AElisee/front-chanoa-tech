@@ -2,19 +2,28 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
 import { updateProductSchema } from '@/lib/schemas'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { ProductDto } from '@/lib/api/products'
 
 function toSlug(str: string) {
   return str
     .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
 }
 
 export async function createProduct(formData: FormData) {
-  const supabase = await guardAdmin()
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
   const imagesRaw = (formData.get('images') as string) ?? ''
   const images = imagesRaw.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 5)
@@ -43,9 +52,8 @@ export async function createProduct(formData: FormData) {
   const { name, description, brand, model, sku, price, price_eur, compare_price, stock, category_id, is_active, images: validImages } = result.data
   const slug = toSlug(name)
 
-  const { data: product, error } = await supabase
-    .from('products')
-    .insert({
+  try {
+    const res = await apiClient.post<ProductDto>('/products', {
       name,
       slug,
       description,
@@ -59,15 +67,13 @@ export async function createProduct(formData: FormData) {
       category_id,
       is_active,
       images: validImages,
-    })
-    .select('id')
-    .single()
+    }, { headers })
 
-  if (error) {
-    redirect(`/admin/produits/nouveau?error=${encodeURIComponent(error.message)}`)
+    revalidatePath('/admin/produits')
+    revalidatePath('/boutique')
+    redirect(`/admin/produits/${res.data.id}?success=1`)
+  } catch (err: unknown) {
+    const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erreur lors de la création'
+    redirect(`/admin/produits/nouveau?error=${encodeURIComponent(message)}`)
   }
-
-  revalidatePath('/admin/produits')
-  revalidatePath('/boutique')
-  redirect(`/admin/produits/${product.id}?success=1`)
 }

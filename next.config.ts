@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
   images: {
     // Allow external image domains used for product images
     remotePatterns: [
+      // Images servies par NestJS (uploads locaux)
+      { protocol: 'http', hostname: 'localhost', port: '3000', pathname: '/uploads/**' },
+      // Domaines HTTPS génériques (CDN externes, Supabase — conservé jusqu'à P9)
       { protocol: 'https', hostname: '**' },
     ],
   },

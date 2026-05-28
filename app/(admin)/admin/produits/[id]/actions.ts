@@ -2,11 +2,23 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
 import { updateProductSchema } from '@/lib/schemas'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+
+async function getAdminHeaders(): Promise<Record<string, string>> {
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 export async function updateProduct(id: string, formData: FormData) {
-  const supabase = await guardAdmin()
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
+  const headers = await getAdminHeaders()
 
   const imagesRaw = (formData.get('images') as string) ?? ''
   const images = imagesRaw.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 5)
@@ -34,9 +46,8 @@ export async function updateProduct(id: string, formData: FormData) {
 
   const { name, description, brand, model, sku, price, price_eur, compare_price, stock, category_id, is_active, images: validImages } = result.data
 
-  const { error } = await supabase
-    .from('products')
-    .update({
+  try {
+    await apiClient.patch(`/products/${id}`, {
       name,
       description,
       brand,
@@ -49,12 +60,10 @@ export async function updateProduct(id: string, formData: FormData) {
       category_id,
       is_active,
       images: validImages,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', id)
-
-  if (error) {
-    redirect(`/admin/produits/${id}?error=${encodeURIComponent(error.message)}`)
+    }, { headers })
+  } catch (err: unknown) {
+    const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erreur lors de la mise à jour'
+    redirect(`/admin/produits/${id}?error=${encodeURIComponent(message)}`)
   }
 
   revalidatePath('/admin/produits')
@@ -65,43 +74,48 @@ export async function updateProduct(id: string, formData: FormData) {
 }
 
 export async function toggleProductActive(id: string, isActive: boolean) {
-  const supabase = await guardAdmin()
+  const user = await getAuthenticatedUser()
+  if (!user || user.role !== 'admin') redirect('/')
 
-  await supabase
-    .from('products')
-    .update({ is_active: isActive, updated_at: new Date().toISOString() })
-    .eq('id', id)
+  const headers = await getAdminHeaders()
+
+  try {
+    await apiClient.patch(`/products/${id}`, { is_active: isActive }, { headers })
+  } catch {
+    // silencieux
+  }
 
   revalidatePath('/admin/produits')
   revalidatePath(`/admin/produits/${id}`)
 }
 
 export async function deleteProduct(id: string) {
-  const supabase = await guardAdmin()
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
 
-  // Check if product has order_items referencing it
-  const { count } = await supabase
-    .from('order_items')
-    .select('id', { count: 'exact', head: true })
-    .eq('product_id', id)
+  const headers = await getAdminHeaders()
 
-  if ((count ?? 0) > 0) {
-    redirect(`/admin/produits/${id}?error=${encodeURIComponent('Ce produit a des commandes associées. Désactivez-le plutôt que de le supprimer.')}`)
+  try {
+    await apiClient.delete(`/products/${id}`, { headers })
+  } catch (err: unknown) {
+    const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erreur lors de la suppression'
+    redirect(`/admin/produits/${id}?error=${encodeURIComponent(message)}`)
   }
-
-  // Delete variants first (cascade should handle it, but be explicit)
-  await supabase.from('product_variants').delete().eq('product_id', id)
-  await supabase.from('products').delete().eq('id', id)
 
   revalidatePath('/admin/produits')
   revalidatePath('/boutique')
   redirect('/admin/produits?deleted=1')
 }
 
-// ── Variant CRUD ──────────────────────────────────────────────
+// ── Variant CRUD (via API NestJS) ────────────────────────────────────────────
 
 export async function createVariant(productId: string, formData: FormData) {
-  const supabase = await guardAdmin()
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
+  const headers = await getAdminHeaders()
 
   const optionsRaw = (formData.get('options') as string)?.trim() || '{}'
   let options: Record<string, string> = {}
@@ -115,22 +129,27 @@ export async function createVariant(productId: string, formData: FormData) {
     redirect(`/admin/produits/${productId}?error=Variante invalide`)
   }
 
-  const { error } = await supabase.from('product_variants').insert({
-    product_id: productId,
-    options,
-    price,
-    stock,
-    sku,
-    is_active: true,
-  })
+  try {
+    await apiClient.post(
+      `/produits/${productId}/variants`,
+      { options, price, stock, sku, is_active: true },
+      { headers },
+    )
+  } catch (err: unknown) {
+    const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erreur lors de la création'
+    redirect(`/admin/produits/${productId}?error=${encodeURIComponent(message)}`)
+  }
 
-  if (error) redirect(`/admin/produits/${productId}?error=${encodeURIComponent(error.message)}`)
   revalidatePath(`/admin/produits/${productId}`)
   redirect(`/admin/produits/${productId}?success=1`)
 }
 
 export async function updateVariant(productId: string, variantId: string, formData: FormData) {
-  const supabase = await guardAdmin()
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
+  const headers = await getAdminHeaders()
 
   const optionsRaw = (formData.get('options') as string)?.trim() || '{}'
   let options: Record<string, string> = {}
@@ -145,14 +164,35 @@ export async function updateVariant(productId: string, variantId: string, formDa
     redirect(`/admin/produits/${productId}?error=Variante invalide`)
   }
 
-  await supabase.from('product_variants').update({ options, price, stock, sku, is_active }).eq('id', variantId)
+  try {
+    await apiClient.patch(
+      `/produits/${productId}/variants/${variantId}`,
+      { options, price, stock, sku, is_active },
+      { headers },
+    )
+  } catch (err: unknown) {
+    const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erreur lors de la mise à jour'
+    redirect(`/admin/produits/${productId}?error=${encodeURIComponent(message)}`)
+  }
+
   revalidatePath(`/admin/produits/${productId}`)
   redirect(`/admin/produits/${productId}?success=1`)
 }
 
 export async function deleteVariant(productId: string, variantId: string) {
-  const supabase = await guardAdmin()
-  await supabase.from('product_variants').delete().eq('id', variantId)
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
+  const headers = await getAdminHeaders()
+
+  try {
+    await apiClient.delete(`/produits/${productId}/variants/${variantId}`, { headers })
+  } catch (err: unknown) {
+    const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erreur lors de la suppression'
+    redirect(`/admin/produits/${productId}?error=${encodeURIComponent(message)}`)
+  }
+
   revalidatePath(`/admin/produits/${productId}`)
   redirect(`/admin/produits/${productId}?success=1`)
 }

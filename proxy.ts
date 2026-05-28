@@ -1,14 +1,21 @@
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { jwtVerify } from 'jose'
+
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET ?? 'fallback_secret'
+)
+
+async function verifyToken(token: string): Promise<{ id: string; role: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET)
+    return { id: payload.sub as string, role: payload.role as string }
+  } catch {
+    return null
+  }
+}
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
-
-  // Skip auth when Supabase is not yet configured
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!supabaseUrl || supabaseUrl === 'your-supabase-project-url') {
-    return NextResponse.next({ request })
-  }
 
   // Only run auth logic for protected routes
   const isProtected = pathname.startsWith('/compte') || pathname.startsWith('/admin')
@@ -16,33 +23,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request })
   }
 
-  let supabaseResponse = NextResponse.next({ request })
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
-          supabaseResponse = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  // Refresh session — required for Server Components
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const token = request.cookies.get('access_token')?.value
+  const user = token ? await verifyToken(token) : null
 
   // Protect /compte/* — must be logged in
   if (pathname.startsWith('/compte') && !user) {
@@ -61,21 +43,20 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(loginUrl)
     }
 
-    // Check admin role
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.role !== 'admin') {
+    if (user.role !== 'admin') {
       const homeUrl = request.nextUrl.clone()
       homeUrl.pathname = '/'
       return NextResponse.redirect(homeUrl)
     }
   }
 
-  return supabaseResponse
+  // Injecter les infos utilisateur en headers pour les Server Components
+  const response = NextResponse.next({ request })
+  if (user) {
+    response.headers.set('x-user-id', user.id)
+    response.headers.set('x-user-role', user.role)
+  }
+  return response
 }
 
 export const config = {

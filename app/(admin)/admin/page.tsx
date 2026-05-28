@@ -1,62 +1,68 @@
 import type { Metadata } from 'next'
 import { Package, ShoppingBag, Users, AlertTriangle, TrendingUp, Clock, ArrowUpRight } from 'lucide-react'
 import { OrderStatusBadge } from '@/components/store/OrderStatusBadge'
-import type { OrderStatus } from '@/lib/supabase/types'
+import type { OrderStatus } from '@/lib/api/orders'
 import Link from 'next/link'
-import { guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
+import { redirect } from 'next/navigation'
 import { formatFCFA } from '@/lib/utils/format'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
 
 export const metadata: Metadata = { title: 'Dashboard Admin' }
 
+interface DashboardStats {
+  totalOrders: number
+  totalProducts: number
+  totalUsers: number
+  revenue7d: number
+  pendingOrders: number
+  lowStockProducts: Array<{ id: string; name: string; stock: number }>
+  recentOrders: Array<{
+    id: string
+    status: string
+    total: number
+    created_at: string
+    client_name: string | null
+  }>
+  weekOrders: Array<{ date: string; total: number }>
+}
+
 export default async function AdminDashboardPage() {
-  const supabase = await guardAdmin()
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
 
-  const [
-    { count: totalProducts },
-    { count: pendingOrders },
-    { count: totalClients },
-    { data: revenueRows },
-    { data: recentOrders },
-    { data: lowStockProducts },
-    { data: weekOrders },
-  ] = await Promise.all([
-    supabase.from('products').select('id', { count: 'exact', head: true }).eq('is_active', true),
-    supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'user'),
-    // Revenue: sum all non-cancelled orders
-    supabase.from('orders').select('total').neq('status', 'cancelled'),
-    supabase
-      .from('orders')
-      .select('id, status, total, created_at, shipping_address, profiles(full_name, email)')
-      .order('created_at', { ascending: false })
-      .limit(8),
-    supabase
-      .from('products')
-      .select('id, name, stock')
-      .lte('stock', 5)
-      .eq('is_active', true)
-      .order('stock', { ascending: true })
-      .limit(10),
-    // Orders last 7 days for mini chart
-    supabase
-      .from('orders')
-      .select('created_at, total')
-      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-      .neq('status', 'cancelled'),
-  ])
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
-  const totalRevenue = (revenueRows ?? []).reduce((s, o) => s + Number(o.total), 0)
+  let stats: DashboardStats | null = null
+  try {
+    const res = await apiClient.get<DashboardStats>('/dashboard/stats', { headers })
+    stats = res.data
+  } catch {
+    // silencieux — on affiche des valeurs zéro en cas d'erreur
+  }
 
-  // Build daily revenue for last 7 days
+  const totalRevenue    = stats?.revenue7d ?? 0
+  const totalProducts   = stats?.totalProducts ?? 0
+  const pendingOrders   = stats?.pendingOrders ?? 0
+  const totalClients    = stats?.totalUsers ?? 0
+  const recentOrders    = stats?.recentOrders ?? []
+  const lowStockProducts = stats?.lowStockProducts ?? []
+  const weekOrdersRaw   = stats?.weekOrders ?? []
+
+  // Construire les données du mini-graphique sur 7 jours
   const dayMap: Record<string, number> = {}
   for (let i = 6; i >= 0; i--) {
     const d = new Date()
     d.setDate(d.getDate() - i)
     dayMap[d.toISOString().slice(0, 10)] = 0
   }
-  for (const o of weekOrders ?? []) {
-    const day = o.created_at.slice(0, 10)
-    if (day in dayMap) dayMap[day] = (dayMap[day] ?? 0) + Number(o.total)
+  for (const o of weekOrdersRaw) {
+    const day = o.date?.slice(0, 10)
+    if (day && day in dayMap) dayMap[day] = (dayMap[day] ?? 0) + Number(o.total)
   }
   const weekData = Object.entries(dayMap).map(([date, total]) => ({
     label: new Date(date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }),
@@ -67,13 +73,13 @@ export default async function AdminDashboardPage() {
   const kpis = [
     { label: 'CA total', value: formatFCFA(totalRevenue), icon: TrendingUp, href: '/admin/commandes',
       gradient: 'from-emerald-500 to-green-600', bg: 'bg-emerald-50', iconBg: 'bg-emerald-500' },
-    { label: 'Produits actifs', value: String(totalProducts ?? 0), icon: Package, href: '/admin/produits',
+    { label: 'Produits actifs', value: String(totalProducts), icon: Package, href: '/admin/produits',
       gradient: 'from-blue-500 to-indigo-600', bg: 'bg-blue-50', iconBg: 'bg-blue-500' },
-    { label: 'En attente', value: String(pendingOrders ?? 0), icon: Clock, href: '/admin/commandes?status=pending',
+    { label: 'En attente', value: String(pendingOrders), icon: Clock, href: '/admin/commandes?status=pending',
       gradient: 'from-amber-500 to-orange-600', bg: 'bg-amber-50', iconBg: 'bg-amber-500' },
-    { label: 'Clients', value: String(totalClients ?? 0), icon: Users, href: '/admin/clients',
+    { label: 'Clients', value: String(totalClients), icon: Users, href: '/admin/clients',
       gradient: 'from-purple-500 to-pink-600', bg: 'bg-purple-50', iconBg: 'bg-purple-500' },
-    { label: 'Commandes 7j', value: String(weekOrders?.length ?? 0), icon: ShoppingBag, href: '/admin/commandes',
+    { label: 'Commandes 7j', value: String(stats?.totalOrders ?? 0), icon: ShoppingBag, href: '/admin/commandes',
       gradient: 'from-rose-500 to-red-600', bg: 'bg-rose-50', iconBg: 'bg-rose-500' },
   ]
 
@@ -156,33 +162,28 @@ export default async function AdminDashboardPage() {
               Voir tout →
             </Link>
           </div>
-          {!recentOrders || recentOrders.length === 0 ? (
+          {recentOrders.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Aucune commande.</p>
           ) : (
             <div className="space-y-1">
-              {recentOrders.map((order) => {
-                const profile = order.profiles as unknown as { full_name: string | null; email: string } | null
-                const addr = order.shipping_address as { full_name?: string; email?: string } | null
-                const clientName = profile?.full_name ?? profile?.email ?? addr?.full_name ?? addr?.email ?? 'Client'
-                return (
-                  <Link
-                    key={order.id}
-                    href={`/admin/commandes/${order.id}`}
-                    className="flex items-center justify-between rounded-lg p-2.5 transition-colors hover:bg-muted/50"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-semibold text-primary">#{order.id.slice(0, 6).toUpperCase()}</span>
-                      </div>
-                      <p className="truncate text-xs text-muted-foreground">{clientName}</p>
+              {recentOrders.map((order) => (
+                <Link
+                  key={order.id}
+                  href={`/admin/commandes/${order.id}`}
+                  className="flex items-center justify-between rounded-lg p-2.5 transition-colors hover:bg-muted/50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-semibold text-primary">#{order.id.slice(0, 6).toUpperCase()}</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold">{formatFCFA(order.total)}</span>
-                      <OrderStatusBadge status={order.status as OrderStatus} />
-                    </div>
-                  </Link>
-                )
-              })}
+                    <p className="truncate text-xs text-muted-foreground">{order.client_name ?? 'Client'}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold">{formatFCFA(order.total)}</span>
+                    <OrderStatusBadge status={order.status as OrderStatus} />
+                  </div>
+                </Link>
+              ))}
             </div>
           )}
         </div>
@@ -200,7 +201,7 @@ export default async function AdminDashboardPage() {
               Gérer →
             </Link>
           </div>
-          {!lowStockProducts || lowStockProducts.length === 0 ? (
+          {lowStockProducts.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Tout le stock est OK.</p>
           ) : (
             <div className="space-y-1">

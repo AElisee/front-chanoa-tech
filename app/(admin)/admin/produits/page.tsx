@@ -3,8 +3,13 @@ import Image from 'next/image'
 import type { Metadata } from 'next'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Plus, Search, Package, Pencil } from 'lucide-react'
-import { guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
+import { redirect } from 'next/navigation'
 import { formatFCFA } from '@/lib/utils/format'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { ProductListResponse, ProductDto } from '@/lib/api/products'
+import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
 
 export const metadata: Metadata = { title: 'Produits — Admin' }
 
@@ -15,68 +20,66 @@ interface Props {
 const PAGE_SIZE = 20
 
 export default async function AdminProduitsPage({ searchParams }: Props) {
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
   const params = await searchParams
   const { q, page = '1', categorie } = params
-  const offset = (Number(page) - 1) * PAGE_SIZE
+  const currentPage = Number(page)
 
-  const supabase = await guardAdmin()
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
-  // Load categories for filter
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('id, name, slug')
-    .is('parent_id', null)
-    .eq('is_active', true)
-    .order('sort_order')
-
-  // Build product query (no nested join — service role doesn't handle it well)
-  let query = supabase
-    .from('products')
-    .select(
-      'id, name, slug, price, stock, brand, sku, is_active, status, category_id, images',
-      { count: 'exact' }
-    )
-
-  if (q?.trim()) {
-    // Sanitize: strip PostgREST special chars that would enable filter injection
-    // Allowed: letters, digits, space, dash, underscore, dot, accents
-    const sanitized = q.trim().replace(/[^a-zA-Z0-9\s\-_.À-ÿ]/g, '').slice(0, 100)
-    if (sanitized) {
-      query = query.or(`name.ilike.%${sanitized}%,brand.ilike.%${sanitized}%,sku.ilike.%${sanitized}%`)
-    }
+  // Charger les catégories pour le filtre
+  let categories: CategoryDto[] = []
+  try {
+    const res = await apiClient.get<CategoryListResponse>('/categories', {
+      params: { limit: 100 },
+      headers,
+    })
+    categories = (res.data.data ?? []).filter((c) => !c.parent_id && c.is_active)
+  } catch {
+    // silencieux
   }
 
+  // Résoudre le slug de catégorie en categoryId
+  let categoryId: string | undefined
   if (categorie) {
-    // Resolve category slug to subcategory ids
-    const { data: mainCat } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('slug', categorie)
-      .single()
-    if (mainCat) {
-      const { data: subCats } = await supabase
-        .from('categories')
-        .select('id')
-        .eq('parent_id', mainCat.id)
-      const ids = subCats?.length ? subCats.map((c) => c.id) : [mainCat.id]
-      query = query.in('category_id', ids)
-    }
+    const matched = categories.find((c) => c.slug === categorie)
+    if (matched) categoryId = matched.id
   }
 
-  query = query
-    .order('created_at', { ascending: false })
-    .range(offset, offset + PAGE_SIZE - 1)
+  // Charger les produits
+  let products: ProductDto[] = []
+  let count = 0
+  try {
+    const apiParams: Record<string, string | number> = {
+      page: currentPage,
+      limit: PAGE_SIZE,
+    }
+    if (q?.trim()) apiParams.search = q.trim()
+    if (categoryId) apiParams.categoryId = categoryId
 
-  const { data: products, count } = await query
+    const res = await apiClient.get<ProductListResponse>('/products', {
+      params: apiParams,
+      headers,
+    })
+    products = res.data.data ?? []
+    count = res.data.total ?? 0
+  } catch {
+    // silencieux
+  }
 
-  const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE)
+  const totalPages = Math.ceil(count / PAGE_SIZE)
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Produits</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">{count ?? 0} produits</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">{count} produits</p>
         </div>
         <Link href="/admin/produits/nouveau" className={buttonVariants()}>
           <Plus className="mr-2 h-4 w-4" /> Nouveau produit
@@ -100,7 +103,7 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
           className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
         >
           <option value="">Toutes catégories</option>
-          {categories?.map((c) => (
+          {categories.map((c) => (
             <option key={c.id} value={c.slug}>{c.name}</option>
           ))}
         </select>
@@ -121,7 +124,7 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
       </form>
 
       {/* Products grid */}
-      {!products || products.length === 0 ? (
+      {products.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border bg-white py-20 text-center shadow-sm">
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
             <Package className="h-7 w-7 text-muted-foreground/60" />
@@ -133,11 +136,7 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {products.map((product) => {
-            const p = product as unknown as {
-              id: string; name: string; slug: string; price: number; stock: number;
-              brand: string | null; sku: string | null; is_active: boolean; images: string[] | null
-            }
+          {products.map((p) => {
             const image = p.images?.[0]
             const stockLabel = p.stock === 0 ? 'Épuisé' : `${p.stock} en stock`
             const stockClass = p.stock === 0
@@ -211,9 +210,9 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="mt-6 flex flex-wrap justify-center gap-2">
-          {Number(page) > 1 && (
+          {currentPage > 1 && (
             <Link
-              href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(categorie ? { categorie } : {}), page: String(Number(page) - 1) })}`}
+              href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(categorie ? { categorie } : {}), page: String(currentPage - 1) })}`}
               className="flex h-9 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
             >
               ← Précédent
@@ -226,7 +225,7 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
                 key={p}
                 href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(categorie ? { categorie } : {}), page: String(p) })}`}
                 className={`flex h-9 w-9 items-center justify-center rounded-md border text-sm font-medium transition-colors ${
-                  p === Number(page)
+                  p === currentPage
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'hover:bg-muted'
                 }`}
@@ -235,9 +234,9 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
               </Link>
             )
           })}
-          {Number(page) < totalPages && (
+          {currentPage < totalPages && (
             <Link
-              href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(categorie ? { categorie } : {}), page: String(Number(page) + 1) })}`}
+              href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(categorie ? { categorie } : {}), page: String(currentPage + 1) })}`}
               className="flex h-9 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
             >
               Suivant →

@@ -1,8 +1,12 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { Plus, Pencil, Eye, EyeOff, Tag } from 'lucide-react'
-import { guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
+import { redirect } from 'next/navigation'
 import { toggleCategoryActive } from './actions'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
 
 export const metadata: Metadata = { title: 'Catégories — Admin' }
 
@@ -11,19 +15,26 @@ interface Props {
 }
 
 export default async function AdminCategoriesPage({ searchParams }: Props) {
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
   const { created, deleted, error } = await searchParams
-  const supabase = await guardAdmin()
 
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('id, name, slug, is_active, parent_id, sort_order, image_url')
-    .order('sort_order', { ascending: true })
-    .order('name', { ascending: true })
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
-  const all = (categories ?? []) as Array<{
-    id: string; name: string; slug: string; is_active: boolean
-    parent_id: string | null; sort_order: number; image_url: string | null
-  }>
+  let all: CategoryDto[] = []
+  try {
+    const res = await apiClient.get<CategoryListResponse>('/categories', {
+      params: { limit: 200 },
+      headers,
+    })
+    all = res.data.data ?? []
+  } catch {
+    // silencieux
+  }
 
   const parents = all.filter((c) => !c.parent_id)
   const children = all.filter((c) => c.parent_id)
@@ -60,7 +71,7 @@ export default async function AdminCategoriesPage({ searchParams }: Props) {
       {parents.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border bg-white py-16 text-center">
           <Tag className="mb-3 h-10 w-10 text-muted-foreground/30" />
-          <p className="text-muted-foreground">Aucune catégorie pour l'instant.</p>
+          <p className="text-muted-foreground">Aucune catégorie pour l&apos;instant.</p>
           <Link href="/admin/categories/new" className="mt-4 text-sm text-primary hover:underline">
             Créer la première catégorie
           </Link>

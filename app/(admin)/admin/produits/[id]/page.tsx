@@ -1,13 +1,17 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import type { Metadata } from 'next'
 import { ChevronRight, CheckCircle, XCircle, Package } from 'lucide-react'
-import { createClient, guardAdmin } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth-server'
 import { formatFCFA, formatEUR } from '@/lib/utils/format'
 import { updateProduct, createVariant, updateVariant, deleteVariant } from './actions'
 import DeleteProductButton from '@/components/admin/DeleteProductButton'
 import ImageUploader from '@/components/admin/ImageUploader'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { ProductDto, VariantDto } from '@/lib/api/products'
+import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -16,42 +20,63 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params
-  const supabase = await createClient()
-  const { data } = await supabase.from('products').select('name').eq('id', id).single()
-  return { title: data ? `Modifier — ${data.name}` : 'Produit introuvable' }
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
+  try {
+    const res = await apiClient.get<ProductDto>(`/products/${id}`, { headers })
+    return { title: `Modifier — ${res.data.name}` }
+  } catch {
+    return { title: 'Produit introuvable' }
+  }
 }
 
 export default async function AdminProduitEditPage({ params, searchParams }: Props) {
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
   const { id } = await params
   const sp = await searchParams
-  const supabase = await guardAdmin()
 
-  const { data: product } = await supabase
-    .from('products')
-    .select('*, categories(id, name, slug, parent_id)')
-    .eq('id', id)
-    .single()
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
+  // Charger le produit via l'API
+  let product: ProductDto | null = null
+  try {
+    const res = await apiClient.get<ProductDto>(`/products/${id}`, { headers })
+    product = res.data
+  } catch {
+    notFound()
+  }
   if (!product) notFound()
 
-  // Load variants
-  const { data: variants } = await supabase
-    .from('product_variants')
-    .select('*')
-    .eq('product_id', id)
-    .order('sort_order')
-    .order('created_at')
+  // Variantes via API NestJS
+  let variants: VariantDto[] = []
+  try {
+    const res = await apiClient.get<VariantDto[]>(`/produits/${id}/variants`, { headers })
+    variants = res.data ?? []
+    variants.sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at))
+  } catch {
+    // silencieux — on affiche une liste vide si l'endpoint est inaccessible
+  }
 
-  // All categories (subcategories) for the select
-  const { data: allCategories } = await supabase
-    .from('categories')
-    .select('id, name, slug, parent_id')
-    .eq('is_active', true)
-    .order('sort_order')
+  // Catégories via l'API
+  let allCategories: CategoryDto[] = []
+  try {
+    const res = await apiClient.get<CategoryListResponse>('/categories', {
+      params: { limit: 200 },
+      headers,
+    })
+    allCategories = res.data.data ?? []
+  } catch {
+    // silencieux
+  }
 
-  // Group: main cats + their sub-cats
-  const mainCats = allCategories?.filter((c) => !c.parent_id) ?? []
-  const subCats = allCategories?.filter((c) => c.parent_id) ?? []
+  const mainCats = allCategories.filter((c) => !c.parent_id)
+  const subCats = allCategories.filter((c) => c.parent_id)
 
   const updateAction = updateProduct.bind(null, id)
 
@@ -228,7 +253,7 @@ export default async function AdminProduitEditPage({ params, searchParams }: Pro
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Images produit
               </h2>
-              <ImageUploader initialImages={product.images ?? []} />
+              <ImageUploader initialImages={product.images ?? []} productId={id} />
             </section>
 
             {/* Preserve is_active when saving other fields (visibility is managed via separate form in sidebar) */}
@@ -366,16 +391,16 @@ export default async function AdminProduitEditPage({ params, searchParams }: Pro
       {/* ── Variants section ─────────────────────────────────────── */}
       <section className="mt-8 rounded-xl border bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Variantes ({variants?.length ?? 0})
+          Variantes ({variants.length})
         </h2>
         <p className="mb-4 text-xs text-muted-foreground">
           Options comme RAM, stockage, couleur. Format JSON : {`{"ram":"16 Go","stockage":"512 Go"}`}
         </p>
 
         {/* Existing variants */}
-        {variants && variants.length > 0 && (
+        {variants.length > 0 && (
           <div className="mb-6 space-y-3">
-            {variants.map((v: { id: string; sku: string | null; options: Record<string, string>; price: number; stock: number; is_active: boolean }) => {
+            {variants.map((v) => {
               const updateAction = updateVariant.bind(null, id, v.id)
               const deleteAction = deleteVariant.bind(null, id, v.id)
               const label = Object.values(v.options).join(' / ') || 'Sans option'

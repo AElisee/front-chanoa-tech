@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "WebFetch(domain:www.ldlc.com)",
-      "WebFetch(domain:www.backmarket.fr)",
-      "WebFetch(domain:docs.wave.com)"
-    ]
-  }
-}

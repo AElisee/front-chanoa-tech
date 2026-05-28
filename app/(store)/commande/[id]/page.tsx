@@ -1,42 +1,62 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
-import { CheckCircle, Package, Truck, Mail, ArrowRight, Phone, Lock, CreditCard, Banknote } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { CheckCircle, XCircle, Package, Truck, Mail, ArrowRight, Phone, Lock, CreditCard, Banknote, AlertCircle } from 'lucide-react'
+import { getAuthenticatedUser } from '@/lib/auth-server'
 import { formatFCFA } from '@/lib/utils/format'
 import OtpTrackingBanner from './OtpTrackingBanner'
 import ClearCartOnMount from './ClearCartOnMount'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { OrderDto } from '@/lib/api/orders'
+import type { PaymentStatusResponse } from '@/lib/api/payment'
 
 export const metadata: Metadata = { title: 'Commande confirmée — Chanoa Tech' }
 
 interface Props {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ email?: string; payment?: string }>
+  searchParams: Promise<{ email?: string; payment?: string; status?: string; reference?: string }>
 }
 
 export default async function OrderConfirmationPage({ params, searchParams }: Props) {
   const { id } = await params
-  const { email: emailParam } = await searchParams
+  const { email: emailParam, status: statusParam, reference: referenceParam } = await searchParams
 
-  // Check if user is authenticated
-  const authClient = await createClient()
-  const { data: { user } } = await authClient.auth.getUser()
+  // Vérifier l'utilisateur authentifié
+  const user = await getAuthenticatedUser()
   const authEmail = user?.email?.toLowerCase() ?? null
 
-  // Load order using service role (guest may not be auth'd)
-  const { createClient: createServiceClient } = await import('@supabase/supabase-js')
-  const supabase = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  // Charger la commande via l'API (le backend gère la visibilité)
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
-  const { data: order } = await supabase
-    .from('orders')
-    .select(`
-      id, status, total, shipping_address, created_at, notes, user_id, guest_email, payment_method,
-      order_items(quantity, unit_price, product_snapshot)
-    `)
-    .eq('id', id)
-    .single()
+  let order: OrderDto | null = null
+  try {
+    const res = await apiClient.get<OrderDto>(`/orders/${id}`, { headers })
+    order = res.data
+  } catch {
+    // commande introuvable ou accès refusé
+  }
+
+  // Vérifier le statut de paiement GeniusPay si une référence est disponible
+  const paymentReference = referenceParam ?? order?.payment_reference ?? null
+  let paymentStatus: PaymentStatusResponse | null = null
+  if (paymentReference) {
+    try {
+      const res = await apiClient.get<PaymentStatusResponse>(
+        `/payment/status/${paymentReference}`,
+        { headers }
+      )
+      paymentStatus = res.data
+    } catch {
+      // statut de paiement non disponible — on continue sans
+    }
+  }
+
+  // Dériver le statut GeniusPay depuis le query param (callback direct) ou l'API
+  const geniusPayStatus = statusParam ?? paymentStatus?.status ?? null
+  const isPaymentCancelled = geniusPayStatus === 'cancelled' || geniusPayStatus === 'failed'
+  const isPaymentSuccess = geniusPayStatus === 'success' || geniusPayStatus === 'paid'
 
   if (!order) {
     return (
@@ -57,13 +77,13 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
     city?: string
   }
 
-  // ── SECURITY: verify ownership before exposing PII ───────────────
+  // ── SÉCURITÉ : vérifier la propriété avant d'exposer les PII ────
   const orderEmail = (order.guest_email ?? address.email ?? '').toLowerCase()
   const providedEmail = (emailParam ?? '').toLowerCase()
   const isOwner =
-    (order.user_id && user && order.user_id === user.id) ||          // authenticated owner
-    (authEmail && orderEmail && authEmail === orderEmail) ||          // auth'd email match
-    (providedEmail && orderEmail && providedEmail === orderEmail)     // guest email link match
+    (order.user_id && user && order.user_id === user.id) ||
+    (authEmail && orderEmail && authEmail === orderEmail) ||
+    (providedEmail && orderEmail && providedEmail === orderEmail)
 
   if (!isOwner) {
     return (
@@ -91,19 +111,63 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
     )
   }
 
-  const items = order.order_items as Array<{
+  type ItemRow = {
     quantity: number
     unit_price: number
     product_snapshot: { name: string; price: number; slug: string }
-  }>
+  }
 
+  const items = (order.order_items ?? []) as unknown as ItemRow[]
   const shortId = order.id.slice(0, 8).toUpperCase()
   const guestEmail = address.email ?? null
-  const isCashOnDelivery = order.payment_method === 'cash_on_delivery'
+
+  // Le champ payment_method n'est pas dans OrderDto standard — on cast
+  const orderAny = order as OrderDto & { payment_method?: string }
+  const isCashOnDelivery = orderAny.payment_method === 'cash_on_delivery'
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
       <ClearCartOnMount />
+
+      {/* Bannière statut paiement GeniusPay */}
+      {isPaymentCancelled && (
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+          <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+          <div>
+            <p className="text-sm font-semibold text-red-800">Paiement annulé ou échoué</p>
+            <p className="mt-1 text-sm text-red-700">
+              Votre commande a bien été enregistrée mais le paiement n&apos;a pas abouti.
+              Notre équipe vous contactera sous 24h pour finaliser la commande.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isPaymentSuccess && (
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4">
+          <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+          <div>
+            <p className="text-sm font-semibold text-green-800">Paiement confirmé</p>
+            <p className="mt-1 text-sm text-green-700">
+              Votre paiement a été reçu avec succès. La préparation de votre commande est en cours.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {geniusPayStatus && !isPaymentSuccess && !isPaymentCancelled && (
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Vérification du paiement en cours</p>
+            <p className="mt-1 text-sm text-amber-700">
+              Statut actuel : <span className="font-medium">{geniusPayStatus}</span>.
+              Nous vérifions votre paiement et vous tiendrons informé par email.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Success header */}
       <div className="mb-8 text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">

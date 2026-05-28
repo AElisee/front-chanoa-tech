@@ -2,9 +2,13 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 import { Search } from 'lucide-react'
 import { OrderStatusBadge } from '@/components/store/OrderStatusBadge'
-import type { OrderStatus } from '@/lib/supabase/types'
-import { guardAdmin } from '@/lib/supabase/server'
+import type { OrderStatus } from '@/lib/api/orders'
+import { getAuthenticatedUser } from '@/lib/auth-server'
+import { redirect } from 'next/navigation'
 import { formatFCFA } from '@/lib/utils/format'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { OrderListResponse, OrderDto } from '@/lib/api/orders'
 
 export const metadata: Metadata = { title: 'Commandes — Admin' }
 
@@ -23,22 +27,28 @@ interface Props {
 }
 
 export default async function AdminCommandesPage({ searchParams }: Props) {
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
   const { status, q, updated } = await searchParams
-  const supabase = await guardAdmin()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query = (supabase as any)
-    .from('orders')
-    .select('id, status, total, created_at, user_id, guest_email, shipping_address')
-    .order('created_at', { ascending: false })
-    .limit(200)
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
-  if (status) query = query.eq('status', status)
+  let orders: OrderDto[] = []
+  try {
+    const apiParams: Record<string, string | number> = { limit: 200 }
+    // Note : filtrage par status sera géré côté client (l'API peut ne pas exposer ce filtre)
 
-  const { data: orders, error: queryError } = await query
-
-  if (queryError) {
-    console.error('Admin orders query error:', JSON.stringify(queryError))
+    const res = await apiClient.get<OrderListResponse>('/orders', {
+      params: apiParams,
+      headers,
+    })
+    orders = res.data.data ?? []
+  } catch (err) {
+    console.error('Admin orders query error:', err)
   }
 
   type OrderRow = {
@@ -51,9 +61,14 @@ export default async function AdminCommandesPage({ searchParams }: Props) {
     shipping_address: { full_name?: string; email?: string; phone?: string } | null
   }
 
-  let list: OrderRow[] = (orders ?? []) as OrderRow[]
+  let list: OrderRow[] = orders as OrderRow[]
 
-  // Client-side search
+  // Filtrage par statut
+  if (status) {
+    list = list.filter((o) => o.status === status)
+  }
+
+  // Recherche client-side
   if (q) {
     const lower = q.toLowerCase()
     list = list.filter((o) => {
