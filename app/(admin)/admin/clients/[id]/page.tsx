@@ -49,7 +49,7 @@ export default async function AdminClientDetailPage({ params }: Props) {
   // Charger les commandes de ce client
   let orderList: OrderDto[] = []
   try {
-    const res = await apiClient.get<OrderListResponse>('/orders', {
+    const res = await apiClient.get<OrderListResponse>('/commande', {
       params: { userId: id, limit: 200 },
       headers,
     })

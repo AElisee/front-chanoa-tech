@@ -23,12 +23,12 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 async function getProductBySlug(slug: string, headers: Record<string, string>): Promise<ProductDto | null> {
   try {
     // Tenter d'abord GET /products/:slug (si l'API accepte le slug comme id)
-    const res = await apiClient.get<ProductDto>(`/products/${slug}`, { headers })
+    const res = await apiClient.get<ProductDto>(`/produits/${slug}`, { headers })
     return res.data
   } catch {
     // Fallback : chercher via search
     try {
-      const res = await apiClient.get<ProductListResponse>('/products', {
+      const res = await apiClient.get<ProductListResponse>('/produits', {
         params: { search: slug, limit: 1 },
         headers,
       })
@@ -70,7 +70,7 @@ export default async function ProductPage({ params }: Props) {
   let related: ProductDto[] = []
   if (product.category_id) {
     try {
-      const res = await apiClient.get<ProductListResponse>('/products', {
+      const res = await apiClient.get<ProductListResponse>('/produits', {
         params: { categoryId: product.category_id, limit: 8 },
         headers,
       })
@@ -85,10 +85,10 @@ export default async function ProductPage({ params }: Props) {
   let parentCat: { name: string; slug: string } | null = null
   if (product.category_id) {
     try {
-      const res = await apiClient.get<CategoryDto>(`/categories/${product.category_id}`, { headers })
+      const res = await apiClient.get<CategoryDto>(`/categorie/${product.category_id}`, { headers })
       cat = res.data
       if (cat.parent_id) {
-        const parentRes = await apiClient.get<CategoryDto>(`/categories/${cat.parent_id}`, { headers })
+        const parentRes = await apiClient.get<CategoryDto>(`/categorie/${cat.parent_id}`, { headers })
         parentCat = { name: parentRes.data.name, slug: parentRes.data.slug }
       }
     } catch {

@@ -41,7 +41,7 @@ export default async function AdminClientsPage({ searchParams }: Props) {
   // Charger toutes les commandes pour calculer les agrégats par client
   let allOrders: OrderDto[] = []
   try {
-    const res = await apiClient.get<OrderListResponse>('/orders', {
+    const res = await apiClient.get<OrderListResponse>('/commande', {
       params: { limit: 1000 },
       headers,
     })

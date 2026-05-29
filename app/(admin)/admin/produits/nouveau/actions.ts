@@ -53,7 +53,7 @@ export async function createProduct(formData: FormData) {
   const slug = toSlug(name)
 
   try {
-    const res = await apiClient.post<ProductDto>('/products', {
+    const res = await apiClient.post<ProductDto>('/produits', {
       name,
       slug,
       description,

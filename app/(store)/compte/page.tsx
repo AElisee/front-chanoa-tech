@@ -33,7 +33,7 @@ export default async function ComptePage() {
 
   let recentOrders: RecentOrder[] = []
   try {
-    const res = await apiClient.get<OrderListResponse>('/orders', {
+    const res = await apiClient.get<OrderListResponse>('/commande', {
       params: { limit: 5 },
       headers,
     })

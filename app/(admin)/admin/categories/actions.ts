@@ -36,7 +36,7 @@ export async function createCategory(formData: FormData) {
   }
   const result = createCategorySchema.safeParse(raw)
   if (!result.success) {
-    redirect(`/admin/categorie?error=${encodeURIComponent(result.error.issues[0].message)}`)
+    redirect(`/admin/categories?error=${encodeURIComponent(result.error.issues[0].message)}`)
   }
   const { name, slug: slugVal, parent_id, image_url } = result.data
   const slug = toSlug(slugVal || name)
@@ -45,18 +45,18 @@ export async function createCategory(formData: FormData) {
     await apiClient.post('/categorie', {
       name,
       slug,
-      parent_id: parent_id ?? null,
+      parentId: parent_id ?? undefined,
       image_url: image_url ?? null,
       is_active: true,
     }, { headers })
   } catch (err: unknown) {
     const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erreur lors de la création'
-    redirect(`/admin/categorie?error=${encodeURIComponent(message)}`)
+    redirect(`/admin/categories?error=${encodeURIComponent(message)}`)
   }
 
-  revalidatePath('/admin/categorie')
+  revalidatePath('/admin/categories')
   revalidatePath('/boutique')
-  redirect('/admin/categorie?created=1')
+  redirect('/admin/categories?created=1')
 }
 
 export async function updateCategory(id: string, formData: FormData) {
@@ -76,7 +76,7 @@ export async function updateCategory(id: string, formData: FormData) {
   }
   const result = updateCategorySchema.safeParse(raw)
   if (!result.success) {
-    redirect(`/admin/categorie/${id}?error=${encodeURIComponent(result.error.issues[0].message)}`)
+    redirect(`/admin/categories/${id}?error=${encodeURIComponent(result.error.issues[0].message)}`)
   }
   const { name, slug: slugVal, description, parent_id, image_url, sort_order } = result.data
   const slug = toSlug(slugVal || name)
@@ -86,19 +86,19 @@ export async function updateCategory(id: string, formData: FormData) {
       name,
       slug,
       description: description ?? null,
-      parent_id: parent_id ?? null,
+      parentId: parent_id ?? undefined,
       image_url: image_url ?? null,
       sort_order,
     }, { headers })
   } catch (err: unknown) {
     const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erreur lors de la mise à jour'
-    redirect(`/admin/categorie/${id}?error=${encodeURIComponent(message)}`)
+    redirect(`/admin/categories/${id}?error=${encodeURIComponent(message)}`)
   }
 
-  revalidatePath('/admin/categorie')
-  revalidatePath(`/admin/categorie/${id}`)
+  revalidatePath('/admin/categories')
+  revalidatePath(`/admin/categories/${id}`)
   revalidatePath('/boutique')
-  redirect(`/admin/categorie/${id}?success=1`)
+  redirect(`/admin/categories/${id}?success=1`)
 }
 
 export async function toggleCategoryActive(id: string, is_active: boolean) {
@@ -113,7 +113,7 @@ export async function toggleCategoryActive(id: string, is_active: boolean) {
     // silencieux
   }
 
-  revalidatePath('/admin/categorie')
+  revalidatePath('/admin/categories')
   revalidatePath('/boutique')
 }
 
@@ -128,10 +128,10 @@ export async function deleteCategory(id: string) {
     await apiClient.delete(`/categorie/${id}`, { headers })
   } catch (err: unknown) {
     const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erreur lors de la suppression'
-    redirect(`/admin/categorie?error=${encodeURIComponent(message)}`)
+    redirect(`/admin/categories?error=${encodeURIComponent(message)}`)
   }
 
-  revalidatePath('/admin/categorie')
+  revalidatePath('/admin/categories')
   revalidatePath('/boutique')
-  redirect('/admin/categorie?deleted=1')
+  redirect('/admin/categories?deleted=1')
 }

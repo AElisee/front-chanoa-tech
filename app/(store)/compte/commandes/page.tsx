@@ -20,7 +20,7 @@ export default async function CommandesPage() {
 
   let orders: OrderDto[] = []
   try {
-    const res = await apiClient.get<OrderListResponse>('/orders', {
+    const res = await apiClient.get<OrderListResponse>('/commande', {
       params: { limit: 100 },
       headers,
     })

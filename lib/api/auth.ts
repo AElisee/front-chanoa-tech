@@ -1,13 +1,13 @@
 import { apiClient } from './client'
 
 export interface LoginResponse {
-  accessToken: string
-  refreshToken?: string
+  access_token: string
+  refresh_token: string
   user: {
     id: string
     email: string
     name: string
-    role: 'user' | 'admin'
+    role: 'admin' | 'client' | 'livreur'
   }
 }
 
@@ -23,7 +23,7 @@ export interface UserProfile {
   email: string
   name: string
   phone: string | null
-  role: 'user' | 'admin'
+  role: 'admin' | 'client' | 'livreur'
   createdAt: string
   updatedAt: string
 }

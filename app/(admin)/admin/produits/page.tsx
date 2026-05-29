@@ -62,7 +62,7 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
     if (q?.trim()) apiParams.search = q.trim()
     if (categoryId) apiParams.categoryId = categoryId
 
-    const res = await apiClient.get<ProductListResponse>('/products', {
+    const res = await apiClient.get<ProductListResponse>('/produits', {
       params: apiParams,
       headers,
     })

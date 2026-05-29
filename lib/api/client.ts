@@ -59,11 +59,10 @@ apiClient.interceptors.response.use(
       originalConfig._retry = true
 
       try {
-        // Le refreshToken est dans le cookie httpOnly — withCredentials l'envoie automatiquement
+        // Passe par la route Next.js qui lit le cookie httpOnly refresh_token côté serveur
         const { data } = await axios.post<{ access_token: string }>(
-          `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`,
+          '/api/auth/refresh',
           {},
-          { withCredentials: true }
         )
 
         setAccessToken(data.access_token)

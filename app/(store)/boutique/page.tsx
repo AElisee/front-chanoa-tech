@@ -42,7 +42,7 @@ export default async function BoutiquePage({ searchParams }: Props) {
   // ── Charger les catégories principales ──────────────────────────
   let mainCategories: CategoryDto[] = []
   try {
-    const res = await apiClient.get<CategoryListResponse>('/categories', {
+    const res = await apiClient.get<CategoryListResponse>('/categorie', {
       params: { limit: 100 },
       headers,
     })
@@ -69,7 +69,7 @@ export default async function BoutiquePage({ searchParams }: Props) {
     if (q?.trim()) apiParams.search = q.trim()
     if (categoryId) apiParams.categoryId = categoryId
 
-    const res = await apiClient.get<ProductListResponse>('/products', {
+    const res = await apiClient.get<ProductListResponse>('/produits', {
       params: apiParams,
       headers,
     })

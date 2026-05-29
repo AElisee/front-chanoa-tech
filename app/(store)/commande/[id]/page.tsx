@@ -32,7 +32,7 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
 
   let order: OrderDto | null = null
   try {
-    const res = await apiClient.get<OrderDto>(`/orders/${id}`, { headers })
+    const res = await apiClient.get<OrderDto>(`/commande/${id}`, { headers })
     order = res.data
   } catch {
     // commande introuvable ou accès refusé
