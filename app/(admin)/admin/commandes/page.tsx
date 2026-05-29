@@ -39,16 +39,17 @@ export default async function AdminCommandesPage({ searchParams }: Props) {
 
   let orders: OrderDto[] = []
   try {
-    const apiParams: Record<string, string | number> = { limit: 200 }
+    const apiParams: Record<string, string | number> = { limit: 500 }
     // Note : filtrage par status sera géré côté client (l'API peut ne pas exposer ce filtre)
 
-    const res = await apiClient.get<OrderListResponse>('/orders', {
+    const res = await apiClient.get<OrderListResponse>('/commande', {
       params: apiParams,
       headers,
     })
     orders = res.data.data ?? []
-  } catch (err) {
-    console.error('Admin orders query error:', err)
+  } catch (err: any) {
+    console.error('Admin orders query error — status:', err?.response?.status)
+    console.error('Admin orders query error — body:', JSON.stringify(err?.response?.data))
   }
 
   type OrderRow = {

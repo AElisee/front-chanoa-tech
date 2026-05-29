@@ -60,16 +60,16 @@ apiClient.interceptors.response.use(
 
       try {
         // Le refreshToken est dans le cookie httpOnly — withCredentials l'envoie automatiquement
-        const { data } = await axios.post<{ accessToken: string }>(
+        const { data } = await axios.post<{ access_token: string }>(
           `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`,
           {},
           { withCredentials: true }
         )
 
-        setAccessToken(data.accessToken)
+        setAccessToken(data.access_token)
 
         // Rejoue la requête originale avec le nouveau token
-        originalConfig.headers.set('Authorization', `Bearer ${data.accessToken}`)
+        originalConfig.headers.set('Authorization', `Bearer ${data.access_token}`)
         return apiClient(originalConfig)
       } catch {
         // Le refresh a échoué : on nettoie le token et on laisse l'erreur remonter

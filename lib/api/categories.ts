@@ -50,17 +50,17 @@ export interface UpdateCategoryDto {
 
 export const categoriesApi = {
   getCategories: (params?: GetCategoriesParams) =>
-    apiClient.get<CategoryListResponse>('/categories', { params }),
+    apiClient.get<CategoryListResponse>('/categorie', { params }),
 
   getCategory: (id: string) =>
-    apiClient.get<CategoryDto>(`/categories/${id}`),
+    apiClient.get<CategoryDto>(`/categorie/${id}`),
 
   createCategory: (data: CreateCategoryDto) =>
-    apiClient.post<CategoryDto>('/categories', data),
+    apiClient.post<CategoryDto>('/categorie', data),
 
   updateCategory: (id: string, data: UpdateCategoryDto) =>
-    apiClient.patch<CategoryDto>(`/categories/${id}`, data),
+    apiClient.patch<CategoryDto>(`/categorie/${id}`, data),
 
   deleteCategory: (id: string) =>
-    apiClient.delete<void>(`/categories/${id}`),
+    apiClient.delete<void>(`/categorie/${id}`),
 }

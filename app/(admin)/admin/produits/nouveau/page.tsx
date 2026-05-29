@@ -28,7 +28,7 @@ export default async function AdminProduitNewPage({ searchParams }: Props) {
 
   let allCategories: CategoryDto[] = []
   try {
-    const res = await apiClient.get<CategoryListResponse>('/categories', {
+    const res = await apiClient.get<CategoryListResponse>('/categorie', {
       params: { limit: 200 },
       headers,
     })

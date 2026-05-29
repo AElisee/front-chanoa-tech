@@ -43,7 +43,7 @@ export default async function AdminCommandeDetailPage({ params, searchParams }: 
   // Charger la commande via l'API
   let order: OrderDto | null = null
   try {
-    const res = await apiClient.get<OrderDto>(`/orders/${id}`, { headers })
+    const res = await apiClient.get<OrderDto>(`/commande/${id}`, { headers })
     order = res.data
   } catch {
     // silencieux

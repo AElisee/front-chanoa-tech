@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const token = cookieStore.get('access_token')?.value
   const headers = token ? { Authorization: `Bearer ${token}` } : {}
   try {
-    const res = await apiClient.get<ProductDto>(`/products/${id}`, { headers })
+    const res = await apiClient.get<ProductDto>(`/produits/${id}`, { headers })
     return { title: `Modifier — ${res.data.name}` }
   } catch {
     return { title: 'Produit introuvable' }
@@ -46,7 +46,7 @@ export default async function AdminProduitEditPage({ params, searchParams }: Pro
   // Charger le produit via l'API
   let product: ProductDto | null = null
   try {
-    const res = await apiClient.get<ProductDto>(`/products/${id}`, { headers })
+    const res = await apiClient.get<ProductDto>(`/produits/${id}`, { headers })
     product = res.data
   } catch {
     notFound()
@@ -66,7 +66,7 @@ export default async function AdminProduitEditPage({ params, searchParams }: Pro
   // Catégories via l'API
   let allCategories: CategoryDto[] = []
   try {
-    const res = await apiClient.get<CategoryListResponse>('/categories', {
+    const res = await apiClient.get<CategoryListResponse>('/categorie', {
       params: { limit: 200 },
       headers,
     })

@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { createCategory } from '../actions'
 import { cookies } from 'next/headers'
 import { apiClient } from '@/lib/api/client'
-import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
+import type { CategoryListResponse, CategoryDto } from '@/lib/api/categorie'
 
 export const metadata: Metadata = { title: 'Nouvelle catégorie — Admin' }
 
@@ -27,7 +27,7 @@ export default async function NewCategoryPage({ searchParams }: Props) {
 
   let parents: CategoryDto[] = []
   try {
-    const res = await apiClient.get<CategoryListResponse>('/categories', {
+    const res = await apiClient.get<CategoryListResponse>('/categorie', {
       params: { limit: 100 },
       headers,
     })

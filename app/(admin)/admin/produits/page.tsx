@@ -35,7 +35,7 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
   // Charger les catégories pour le filtre
   let categories: CategoryDto[] = []
   try {
-    const res = await apiClient.get<CategoryListResponse>('/categories', {
+    const res = await apiClient.get<CategoryListResponse>('/categorie', {
       params: { limit: 100 },
       headers,
     })

@@ -96,19 +96,19 @@ export interface UpdateProductDto {
 
 export const productsApi = {
   getProducts: (params?: GetProductsParams) =>
-    apiClient.get<ProductListResponse>('/products', { params }),
+    apiClient.get<ProductListResponse>('/produits', { params }),
 
   getProduct: (id: string) =>
-    apiClient.get<ProductDto>(`/products/${id}`),
+    apiClient.get<ProductDto>(`/produits/${id}`),
 
   createProduct: (data: CreateProductDto) =>
-    apiClient.post<ProductDto>('/products', data),
+    apiClient.post<ProductDto>('/produits', data),
 
   updateProduct: (id: string, data: UpdateProductDto) =>
-    apiClient.patch<ProductDto>(`/products/${id}`, data),
+    apiClient.patch<ProductDto>(`/produits/${id}`, data),
 
   deleteProduct: (id: string) =>
-    apiClient.delete<void>(`/products/${id}`),
+    apiClient.delete<void>(`/produits/${id}`),
 
   // ── Variantes ──────────────────────────────────────────────────────────────
 

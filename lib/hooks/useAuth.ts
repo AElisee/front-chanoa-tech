@@ -7,7 +7,7 @@ interface User {
   id: string
   email: string
   name: string
-  role: 'admin' | 'user'
+  role: 'admin' | 'client' | 'livreur'
   phone?: string | null
 }
 
@@ -42,7 +42,7 @@ export const useAuth = create<AuthStore>((set) => ({
     set({ isLoading: true })
     try {
       const res = await authApi.login(email, password)
-      const { accessToken, refreshToken, user } = res.data
+      const { access_token: accessToken, refresh_token: refreshToken, user } = res.data
       // Stocker access token en mémoire
       setAccessToken(accessToken)
       // Poser le refresh token en cookie httpOnly via la route Next.js
@@ -64,7 +64,7 @@ export const useAuth = create<AuthStore>((set) => ({
     set({ isLoading: true })
     try {
       const res = await authApi.register(data)
-      const { accessToken, refreshToken, user } = res.data
+      const { access_token: accessToken, refresh_token: refreshToken, user } = res.data
       setAccessToken(accessToken)
       await fetch('/api/auth/set-cookie', {
         method: 'POST',

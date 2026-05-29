@@ -27,18 +27,14 @@ export default function LoginForm() {
     setLoading(true)
 
     try {
-      await login(emailVal, passVal)
+      const { user } = await login(emailVal, passVal).then(() => useAuth.getState())
 
-      // Récupérer le user depuis le store pour vérifier le rôle
-      const { user } = useAuth.getState()
-      if (user?.role === 'admin') {
-        router.push('/admin')
-        router.refresh()
+      if (user?.role === 'admin' || user?.role === 'livreur') {
+        router.replace('/admin')
         return
       }
 
-      router.push(redirect)
-      router.refresh()
+      router.replace(redirect)
     } catch (err) {
       const axiosErr = err as AxiosError<{ message?: string }>
       const message =

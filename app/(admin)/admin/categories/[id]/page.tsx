@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { updateCategory, deleteCategory } from '../actions'
 import { cookies } from 'next/headers'
 import { apiClient } from '@/lib/api/client'
-import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
+import type { CategoryListResponse, CategoryDto } from '@/lib/api/categorie'
 
 export const metadata: Metadata = { title: 'Modifier catégorie — Admin' }
 
@@ -32,8 +32,8 @@ export default async function EditCategoryPage({ params, searchParams }: Props) 
 
   try {
     const [catRes, parentsRes] = await Promise.all([
-      apiClient.get<CategoryDto>(`/categories/${id}`, { headers }),
-      apiClient.get<CategoryListResponse>('/categories', { params: { limit: 100 }, headers }),
+      apiClient.get<CategoryDto>(`/categorie/${id}`, { headers }),
+      apiClient.get<CategoryListResponse>('/categorie', { params: { limit: 100 }, headers }),
     ])
     category = catRes.data
     allParents = (parentsRes.data.data ?? []).filter((c) => !c.parent_id)
