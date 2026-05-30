@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { updateCategory, deleteCategory } from '../actions'
 import { cookies } from 'next/headers'
 import { apiClient } from '@/lib/api/client'
-import type { CategoryListResponse, CategoryDto } from '@/lib/api/categorie'
+import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
 
 export const metadata: Metadata = { title: 'Modifier catégorie — Admin' }
 
