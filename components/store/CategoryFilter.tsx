@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
@@ -32,6 +31,8 @@ export default function CategoryFilter({
 
   const [openId, setOpenId] = useState<string | null>(defaultOpen)
 
+  // <a> au lieu de <Link> : force un rechargement serveur complet,
+  // contourne le Router Cache client de Next.js (30s TTL).
   function buildHref(slug?: string) {
     const params = new URLSearchParams(searchParams.toString())
     if (slug) {
@@ -40,7 +41,7 @@ export default function CategoryFilter({
       params.delete('categorie')
     }
     params.delete('page')
-    return `?${params}`
+    return `/boutique?${params}`
   }
 
   function toggle(id: string) {
@@ -49,8 +50,7 @@ export default function CategoryFilter({
 
   const totalProducts = mainCats.reduce((sum, c) => {
     const subs = subsByParent[c.id] ?? []
-    const subTotal = subs.reduce((s, sub) => s + (sub.product_count ?? 0), 0)
-    return sum + (c.product_count ?? 0) + subTotal
+    return sum + (c.product_count ?? 0) + subs.reduce((s, sub) => s + (sub.product_count ?? 0), 0)
   }, 0)
 
   return (
@@ -59,11 +59,9 @@ export default function CategoryFilter({
         Catégories
       </h2>
       <ul className="space-y-0.5">
-        {/* Toutes les catégories */}
         <li>
-          <Link
+          <a
             href={buildHref()}
-            prefetch={false}
             className={`flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted ${
               !current ? 'bg-primary/10 font-medium text-primary' : 'text-foreground'
             }`}
@@ -74,7 +72,7 @@ export default function CategoryFilter({
                 {totalProducts}
               </span>
             )}
-          </Link>
+          </a>
         </li>
 
         {mainCats.map((cat) => {
@@ -93,9 +91,8 @@ export default function CategoryFilter({
                       isCurrentOrParent ? 'bg-primary/10' : 'hover:bg-muted'
                     }`}
                   >
-                    <Link
+                    <a
                       href={buildHref(cat.slug)}
-                      prefetch={false}
                       className={`flex flex-1 items-center justify-between px-3 py-2 text-sm ${
                         isCurrentOrParent ? 'font-medium text-primary' : 'text-foreground'
                       }`}
@@ -106,7 +103,7 @@ export default function CategoryFilter({
                           {cat.product_count}
                         </span>
                       )}
-                    </Link>
+                    </a>
                     <button
                       onClick={() => toggle(cat.id)}
                       className="px-2 py-2 text-muted-foreground hover:text-foreground"
@@ -122,9 +119,8 @@ export default function CategoryFilter({
                     <ul className="ml-3 mt-0.5 space-y-0.5 border-l pl-3">
                       {subs.map((sub) => (
                         <li key={sub.id}>
-                          <Link
+                          <a
                             href={buildHref(sub.slug)}
-                            prefetch={false}
                             className={`flex items-center justify-between rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-muted ${
                               current === sub.slug
                                 ? 'font-medium text-primary'
@@ -137,16 +133,15 @@ export default function CategoryFilter({
                                 {sub.product_count}
                               </span>
                             )}
-                          </Link>
+                          </a>
                         </li>
                       ))}
                     </ul>
                   )}
                 </>
               ) : (
-                <Link
+                <a
                   href={buildHref(cat.slug)}
-                  prefetch={false}
                   className={`flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted ${
                     current === cat.slug
                       ? 'bg-primary/10 font-medium text-primary'
@@ -159,7 +154,7 @@ export default function CategoryFilter({
                       {cat.product_count}
                     </span>
                   )}
-                </Link>
+                </a>
               )}
             </li>
           )
