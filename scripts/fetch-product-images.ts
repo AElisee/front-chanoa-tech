@@ -8,7 +8,7 @@
  * Prérequis dans .env.local :
  *   GOOGLE_API_KEY=AIza...
  *   GOOGLE_CSE_ID=xxxxxxxxx:yyyyyy
- *   NEXT_PUBLIC_API_URL=http://localhost:3001
+ *   NEXT_PUBLIC_API_URL=http://localhost:3201
  *   ADMIN_API_TOKEN=<token JWT admin>
  *
  * Usage :
@@ -26,7 +26,7 @@ config({ path: resolve(process.cwd(), '.env.local') })
 
 // ── Config ─────────────────────────────────────────────────────
 
-const API_URL        = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+const API_URL        = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3201'
 const ADMIN_TOKEN    = process.env.ADMIN_API_TOKEN
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY
 const GOOGLE_CSE_ID  = process.env.GOOGLE_CSE_ID

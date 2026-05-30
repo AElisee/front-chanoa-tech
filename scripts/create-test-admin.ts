@@ -16,7 +16,7 @@ config({ path: resolve(process.cwd(), '.env.local') })
 
 const TEST_EMAIL    = 'test-admin@chanoatech.com'
 const TEST_PASSWORD = 'TestAdmin!2026'
-const API_URL       = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+const API_URL       = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3201'
 
 async function main() {
   console.log('Création du compte admin de test via l\'API NestJS…')
