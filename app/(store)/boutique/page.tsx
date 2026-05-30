@@ -49,8 +49,8 @@ export default async function BoutiquePage({ searchParams }: Props) {
       headers,
     })
     allCategories = (res.data.data ?? []).filter((c) => c.is_active)
-  } catch {
-    // silencieux : la sidebar s'affichera sans catégories
+  } catch (err) {
+    console.error('[boutique] categories fetch error:', err)
   }
 
   // ── Résoudre le filtre catégorie : slug → id ─────────────────────
@@ -77,8 +77,8 @@ export default async function BoutiquePage({ searchParams }: Props) {
     })
     products = res.data.data ?? []
     total = res.data.total ?? 0
-  } catch {
-    // silencieux
+  } catch (err) {
+    console.error('[boutique] products fetch error:', err)
   }
 
   const totalPages = Math.ceil(total / PAGE_SIZE)

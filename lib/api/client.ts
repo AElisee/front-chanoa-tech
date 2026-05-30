@@ -18,8 +18,16 @@ export function clearAccessToken(): void {
 
 // ── Création de l'instance ────────────────────────────────────────────────────
 
+// Côté serveur, on utilise l'URL interne (localhost) pour éviter de passer
+// par l'IP publique et les règles UFW. Côté client (navigateur), on utilise
+// l'URL publique définie dans NEXT_PUBLIC_API_URL.
+const baseURL =
+  typeof window === 'undefined'
+    ? (process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3200')
+    : process.env.NEXT_PUBLIC_API_URL
+
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL,
   withCredentials: true, // nécessaire pour envoyer le cookie refresh_token
   headers: {
     'Content-Type': 'application/json',
