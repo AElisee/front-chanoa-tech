@@ -8,27 +8,29 @@ import {
   Search, Monitor, Printer, Server,
   HardDrive, Wifi, Headphones, Tv, Computer,
   Building2, GraduationCap, Landmark, Shield, Award,
-  Database, Package, ChevronDown, Phone,
+  Database, Package, ChevronDown, Phone, Tag,
+  type LucideIcon,
 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { Badge } from '@/components/ui/badge'
 import { useCart } from '@/lib/hooks/useCart'
+
 import { useCurrency } from '@/lib/hooks/useCurrency'
 import { cn } from '@/lib/utils'
+import type { CategoryDto } from '@/lib/api/categories'
 
-const categories = [
-  { href: '/boutique?categorie=pc-de-bureau',          label: 'PC de bureau',          icon: Computer },
-  { href: '/boutique?categorie=ordinateurs-portables', label: 'Ordinateurs portables',  icon: Laptop },
-  { href: '/boutique?categorie=ecrans',                label: 'Écrans',                 icon: Monitor },
-  { href: '/boutique?categorie=imprimantes',           label: 'Imprimantes',            icon: Printer },
-  { href: '/boutique?categorie=serveurs',              label: 'Serveurs',               icon: Server },
-  { href: '/boutique?categorie=stockage',              label: 'Stockage',               icon: HardDrive },
-  { href: '/boutique?categorie=reseau',                label: 'Réseau',                 icon: Wifi },
-  { href: '/boutique?categorie=visioconference',       label: 'Visioconférence',        icon: Tv },
-  { href: '/boutique?categorie=accessoires',           label: 'Accessoires',            icon: Headphones },
-]
+const SLUG_ICONS: Record<string, LucideIcon> = {
+  'pc-de-bureau':          Computer,
+  'ordinateurs-portables': Laptop,
+  'ecrans':                Monitor,
+  'imprimantes':           Printer,
+  'serveurs':              Server,
+  'stockage':              HardDrive,
+  'reseau':                Wifi,
+  'visioconference':       Tv,
+  'accessoires':           Headphones,
+}
 
 const solutions = [
   { href: '/entreprises',            label: 'Entreprises',       icon: Building2,    desc: 'Postes, réseau, visio, sécurité' },
@@ -40,7 +42,7 @@ const solutions = [
   { href: '/references',             label: 'Références',        icon: Award,        desc: 'Cas clients & témoignages' },
 ]
 
-export default function Header() {
+export default function Header({ categories = [] }: { categories?: CategoryDto[] }) {
   const pathname = usePathname()
   const router = useRouter()
   const { itemCount } = useCart()
@@ -136,17 +138,20 @@ export default function Header() {
               {catOpen && (
                 <div className="absolute left-0 top-full mt-1 w-64 rounded-lg border bg-card shadow-xl">
                   <div className="p-2">
-                    {categories.map(({ href, label, icon: Icon }) => (
-                      <Link
-                        key={href}
-                        href={href}
-                        onClick={() => setCatOpen(false)}
-                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted hover:text-primary"
-                      >
-                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        {label}
-                      </Link>
-                    ))}
+                    {categories.map((cat) => {
+                      const Icon = SLUG_ICONS[cat.slug] ?? Tag
+                      return (
+                        <Link
+                          key={cat.id}
+                          href={`/boutique?categorie=${cat.slug}`}
+                          onClick={() => setCatOpen(false)}
+                          className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted hover:text-primary"
+                        >
+                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          {cat.name}
+                        </Link>
+                      )
+                    })}
                     <div className="mt-1 border-t pt-1">
                       <Link
                         href="/boutique"
@@ -320,17 +325,20 @@ export default function Header() {
                   <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Catégories
                   </p>
-                  {categories.map(({ href, label, icon: Icon }) => (
-                    <Link
-                      key={href}
-                      href={href}
-                      onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-3 rounded-md px-2 py-2.5 text-sm text-foreground transition-colors hover:bg-muted hover:text-primary"
-                    >
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                      {label}
-                    </Link>
-                  ))}
+                  {categories.map((cat) => {
+                    const Icon = SLUG_ICONS[cat.slug] ?? Tag
+                    return (
+                      <Link
+                        key={cat.id}
+                        href={`/boutique?categorie=${cat.slug}`}
+                        onClick={() => setMobileOpen(false)}
+                        className="flex items-center gap-3 rounded-md px-2 py-2.5 text-sm text-foreground transition-colors hover:bg-muted hover:text-primary"
+                      >
+                        <Icon className="h-4 w-4 text-muted-foreground" />
+                        {cat.name}
+                      </Link>
+                    )
+                  })}
 
                   <div className="my-3 border-t" />
 

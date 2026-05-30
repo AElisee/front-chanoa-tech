@@ -39,7 +39,7 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
       params: { limit: 100 },
       headers,
     })
-    categories = (res.data.data ?? []).filter((c) => !c.parent_id && c.is_active)
+    categories = res.data.data ?? []
   } catch {
     // silencieux
   }
@@ -73,6 +73,7 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
   }
 
   const totalPages = Math.ceil(count / PAGE_SIZE)
+  const categoryMap = new Map(categories.map((c) => [c.id, c.name]))
 
   return (
     <div>
@@ -186,11 +187,18 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
 
                 {/* Info */}
                 <div className="flex flex-1 flex-col gap-1.5 p-4">
-                  {p.brand && (
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {p.brand}
-                    </p>
-                  )}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {p.brand && (
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {p.brand}
+                      </p>
+                    )}
+                    {p.category_id && categoryMap.get(p.category_id) && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        {categoryMap.get(p.category_id)}
+                      </span>
+                    )}
+                  </div>
                   <p className="line-clamp-2 text-sm font-semibold text-foreground">
                     {p.name}
                   </p>
