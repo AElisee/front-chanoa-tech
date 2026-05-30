@@ -39,14 +39,14 @@ export default async function BoutiquePage({ searchParams }: Props) {
 
   const headers = await getAuthHeaders()
 
-  // ── Charger les catégories principales ──────────────────────────
-  let mainCategories: CategoryDto[] = []
+  // ── Charger toutes les catégories actives (principales + sous) ───
+  let allCategories: CategoryDto[] = []
   try {
     const res = await apiClient.get<CategoryListResponse>('/categorie', {
-      params: { limit: 100 },
+      params: { limit: 200 },
       headers,
     })
-    mainCategories = (res.data.data ?? []).filter((c) => !c.parent_id && c.is_active)
+    allCategories = (res.data.data ?? []).filter((c) => c.is_active)
   } catch {
     // silencieux : la sidebar s'affichera sans catégories
   }
@@ -54,7 +54,7 @@ export default async function BoutiquePage({ searchParams }: Props) {
   // ── Résoudre le filtre catégorie : slug → id ─────────────────────
   let categoryId: string | undefined
   if (categorie) {
-    const matched = mainCategories.find((c) => c.slug === categorie)
+    const matched = allCategories.find((c) => c.slug === categorie)
     if (matched) categoryId = matched.id
   }
 
@@ -97,7 +97,7 @@ export default async function BoutiquePage({ searchParams }: Props) {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">
           {categorie
-            ? (mainCategories.find((c) => c.slug === categorie)?.name ?? 'Boutique')
+            ? (allCategories.find((c) => c.slug === categorie)?.name ?? 'Boutique')
             : 'Boutique'}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -108,7 +108,7 @@ export default async function BoutiquePage({ searchParams }: Props) {
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* ── Sidebar ───────────────────────────────────────────── */}
         <aside className="w-full shrink-0 space-y-4 lg:w-64">
-          <CategoryFilter categories={mainCategories} current={categorie} />
+          <CategoryFilter categories={allCategories} current={categorie} />
 
           {/* Brand filter */}
           {brands.length > 0 && (

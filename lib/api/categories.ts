@@ -12,6 +12,7 @@ export interface CategoryDto {
   is_active: boolean
   sort_order: number
   created_at: string
+  product_count?: number
 }
 
 export interface CategoryListResponse {

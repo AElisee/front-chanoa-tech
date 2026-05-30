@@ -2,21 +2,36 @@
 
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-
-interface Category {
-  id: string
-  name: string
-  slug: string
-}
+import { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
+import type { CategoryDto } from '@/lib/api/categories'
 
 export default function CategoryFilter({
   categories,
   current,
 }: {
-  categories: Category[]
+  categories: CategoryDto[]
   current?: string
 }) {
   const searchParams = useSearchParams()
+
+  const mainCats = categories.filter((c) => !c.parent_id)
+  const subsByParent: Record<string, CategoryDto[]> = {}
+  for (const sub of categories.filter((c) => c.parent_id)) {
+    const pid = sub.parent_id!
+    if (!subsByParent[pid]) subsByParent[pid] = []
+    subsByParent[pid].push(sub)
+  }
+
+  // Ouvrir par défaut l'accordéon qui contient la catégorie sélectionnée
+  const currentCat = categories.find((c) => c.slug === current)
+  const defaultOpen = currentCat?.parent_id
+    ? currentCat.parent_id
+    : currentCat && subsByParent[currentCat.id]
+      ? currentCat.id
+      : null
+
+  const [openId, setOpenId] = useState<string | null>(defaultOpen)
 
   function buildHref(slug?: string) {
     const params = new URLSearchParams(searchParams.toString())
@@ -29,36 +44,127 @@ export default function CategoryFilter({
     return `?${params}`
   }
 
+  function toggle(id: string) {
+    setOpenId((prev) => (prev === id ? null : id))
+  }
+
+  const totalProducts = mainCats.reduce((sum, c) => {
+    const subs = subsByParent[c.id] ?? []
+    const subTotal = subs.reduce((s, sub) => s + (sub.product_count ?? 0), 0)
+    return sum + (c.product_count ?? 0) + subTotal
+  }, 0)
+
   return (
     <div className="rounded-xl border bg-white p-4 shadow-sm">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
         Catégories
       </h2>
-      <ul className="space-y-1">
+      <ul className="space-y-0.5">
+        {/* Toutes les catégories */}
         <li>
           <Link
             href={buildHref()}
-            className={`block rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted ${
+            className={`flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted ${
               !current ? 'bg-primary/10 font-medium text-primary' : 'text-foreground'
             }`}
           >
-            Toutes les catégories
+            <span>Toutes les catégories</span>
+            {totalProducts > 0 && (
+              <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                {totalProducts}
+              </span>
+            )}
           </Link>
         </li>
-        {categories.map((cat) => (
-          <li key={cat.id}>
-            <Link
-              href={buildHref(cat.slug)}
-              className={`block rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted ${
-                current === cat.slug
-                  ? 'bg-primary/10 font-medium text-primary'
-                  : 'text-foreground'
-              }`}
-            >
-              {cat.name}
-            </Link>
-          </li>
-        ))}
+
+        {mainCats.map((cat) => {
+          const subs = subsByParent[cat.id] ?? []
+          const hasSubs = subs.length > 0
+          const isOpen = openId === cat.id
+          const isCurrentOrParent =
+            current === cat.slug ||
+            subs.some((s) => s.slug === current)
+
+          return (
+            <li key={cat.id}>
+              {hasSubs ? (
+                <>
+                  {/* Catégorie principale cliquable + bouton toggle */}
+                  <div
+                    className={`flex items-center rounded-md transition-colors ${
+                      isCurrentOrParent ? 'bg-primary/10' : 'hover:bg-muted'
+                    }`}
+                  >
+                    <Link
+                      href={buildHref(cat.slug)}
+                      className={`flex flex-1 items-center justify-between px-3 py-2 text-sm ${
+                        isCurrentOrParent ? 'font-medium text-primary' : 'text-foreground'
+                      }`}
+                    >
+                      <span>{cat.name}</span>
+                      {(cat.product_count ?? 0) > 0 && (
+                        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                          {cat.product_count}
+                        </span>
+                      )}
+                    </Link>
+                    <button
+                      onClick={() => toggle(cat.id)}
+                      className="px-2 py-2 text-muted-foreground hover:text-foreground"
+                      aria-label={isOpen ? 'Fermer' : 'Ouvrir'}
+                    >
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Sous-catégories */}
+                  {isOpen && (
+                    <ul className="ml-3 mt-0.5 space-y-0.5 border-l pl-3">
+                      {subs.map((sub) => (
+                        <li key={sub.id}>
+                          <Link
+                            href={buildHref(sub.slug)}
+                            className={`flex items-center justify-between rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-muted ${
+                              current === sub.slug
+                                ? 'font-medium text-primary'
+                                : 'text-muted-foreground'
+                            }`}
+                          >
+                            <span>{sub.name}</span>
+                            {(sub.product_count ?? 0) > 0 && (
+                              <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                {sub.product_count}
+                              </span>
+                            )}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                /* Catégorie sans sous-catégories */
+                <Link
+                  href={buildHref(cat.slug)}
+                  className={`flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted ${
+                    current === cat.slug
+                      ? 'bg-primary/10 font-medium text-primary'
+                      : 'text-foreground'
+                  }`}
+                >
+                  <span>{cat.name}</span>
+                  {(cat.product_count ?? 0) > 0 && (
+                    <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      {cat.product_count}
+                    </span>
+                  )}
+                </Link>
+              )}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
