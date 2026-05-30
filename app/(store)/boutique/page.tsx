@@ -9,6 +9,8 @@ import { apiClient } from '@/lib/api/client'
 import type { ProductListResponse, ProductDto } from '@/lib/api/products'
 import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'Boutique — Chanoa Tech',
   description: 'Découvrez notre catalogue de 2000 références IT professionnelles.',

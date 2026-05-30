@@ -23,7 +23,6 @@ export default function CategoryFilter({
     subsByParent[pid].push(sub)
   }
 
-  // Ouvrir par défaut l'accordéon qui contient la catégorie sélectionnée
   const currentCat = categories.find((c) => c.slug === current)
   const defaultOpen = currentCat?.parent_id
     ? currentCat.parent_id
@@ -64,6 +63,7 @@ export default function CategoryFilter({
         <li>
           <Link
             href={buildHref()}
+            prefetch={false}
             className={`flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted ${
               !current ? 'bg-primary/10 font-medium text-primary' : 'text-foreground'
             }`}
@@ -82,14 +82,12 @@ export default function CategoryFilter({
           const hasSubs = subs.length > 0
           const isOpen = openId === cat.id
           const isCurrentOrParent =
-            current === cat.slug ||
-            subs.some((s) => s.slug === current)
+            current === cat.slug || subs.some((s) => s.slug === current)
 
           return (
             <li key={cat.id}>
               {hasSubs ? (
                 <>
-                  {/* Catégorie principale cliquable + bouton toggle */}
                   <div
                     className={`flex items-center rounded-md transition-colors ${
                       isCurrentOrParent ? 'bg-primary/10' : 'hover:bg-muted'
@@ -97,6 +95,7 @@ export default function CategoryFilter({
                   >
                     <Link
                       href={buildHref(cat.slug)}
+                      prefetch={false}
                       className={`flex flex-1 items-center justify-between px-3 py-2 text-sm ${
                         isCurrentOrParent ? 'font-medium text-primary' : 'text-foreground'
                       }`}
@@ -119,13 +118,13 @@ export default function CategoryFilter({
                     </button>
                   </div>
 
-                  {/* Sous-catégories */}
                   {isOpen && (
                     <ul className="ml-3 mt-0.5 space-y-0.5 border-l pl-3">
                       {subs.map((sub) => (
                         <li key={sub.id}>
                           <Link
                             href={buildHref(sub.slug)}
+                            prefetch={false}
                             className={`flex items-center justify-between rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-muted ${
                               current === sub.slug
                                 ? 'font-medium text-primary'
@@ -145,9 +144,9 @@ export default function CategoryFilter({
                   )}
                 </>
               ) : (
-                /* Catégorie sans sous-catégories */
                 <Link
                   href={buildHref(cat.slug)}
+                  prefetch={false}
                   className={`flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted ${
                     current === cat.slug
                       ? 'bg-primary/10 font-medium text-primary'
