@@ -70,6 +70,8 @@ export default async function BoutiquePage({ searchParams }: Props) {
     }
     if (q?.trim()) apiParams.search = q.trim()
     if (categoryId) apiParams.categoryId = categoryId
+    if (marque?.trim()) apiParams.brand = marque.trim()
+    if (tri !== 'recent') apiParams.tri = tri
 
     const res = await apiClient.get<ProductListResponse>('/produits', {
       params: apiParams,
@@ -88,10 +90,7 @@ export default async function BoutiquePage({ searchParams }: Props) {
     ...new Set(products.map((p) => p.brand).filter((b): b is string => Boolean(b))),
   ].sort()
 
-  // Filtrage client par marque (l'API ne filtre pas par brand)
-  const filteredProducts = marque
-    ? products.filter((p) => p.brand?.toLowerCase() === marque.toLowerCase())
-    : products
+  const filteredProducts = products
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">

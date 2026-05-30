@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import Header from '@/components/store/Header'
 import Footer from '@/components/store/Footer'
 import { apiClient } from '@/lib/api/client'
