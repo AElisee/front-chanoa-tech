@@ -33,7 +33,7 @@ export async function updateProduct(id: string, formData: FormData) {
     price_eur: (formData.get('price_eur') as string) ? parseFloat(formData.get('price_eur') as string) : null,
     compare_price: (formData.get('compare_price') as string) ? parseFloat(formData.get('compare_price') as string) : null,
     stock: parseInt(formData.get('stock') as string, 10),
-    category_id: (formData.get('category_id') as string) || null,
+    categoryId: (formData.get('category_id') as string) || null,
     is_active: formData.get('is_active') === '1',
     images,
   }
@@ -44,7 +44,7 @@ export async function updateProduct(id: string, formData: FormData) {
     redirect(`/admin/produits/${id}?error=${encodeURIComponent(msg)}`)
   }
 
-  const { name, description, brand, model, sku, price, price_eur, compare_price, stock, category_id, is_active, images: validImages } = result.data
+  const { name, description, brand, model, sku, price, price_eur, compare_price, stock, categoryId, is_active, images: validImages } = result.data
 
   try {
     await apiClient.patch(`/produits/${id}`, {
@@ -57,7 +57,7 @@ export async function updateProduct(id: string, formData: FormData) {
       price_eur,
       compare_price,
       stock,
-      category_id,
+      categoryId,
       is_active,
       images: validImages,
     }, { headers })

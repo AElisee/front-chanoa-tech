@@ -51,7 +51,7 @@ export const updateProductSchema = z.object({
   price_eur: z.number().nonnegative().nullable(),
   compare_price: z.number().nonnegative().nullable(),
   stock: z.number().int().nonnegative('Le stock doit être positif'),
-  category_id: z.string().uuid().nullable(),
+  categoryId: z.string().uuid().nullable(),
   is_active: z.boolean(),
   images: z.array(z.string().url()).max(5),
 })
