@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import Header from '@/components/store/Header'
 import Footer from '@/components/store/Footer'
+import AuthInitializer from '@/components/AuthInitializer'
 import { apiClient } from '@/lib/api/client'
 import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
 
@@ -27,6 +28,7 @@ export default async function StoreLayout({
 
   return (
     <div className="flex min-h-screen flex-col">
+      <AuthInitializer />
       <Header categories={categories} />
       <main className="flex-1">{children}</main>
       <Footer />

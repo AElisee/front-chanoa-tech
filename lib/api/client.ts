@@ -75,6 +75,11 @@ apiClient.interceptors.response.use(
 
         setAccessToken(data.access_token)
 
+        // Repose le cookie access_token pour les futures navigations/refreshs
+        if (typeof document !== 'undefined') {
+          document.cookie = `access_token=${data.access_token}; path=/; max-age=3600; SameSite=Strict`
+        }
+
         // Rejoue la requête originale avec le nouveau token
         originalConfig.headers.set('Authorization', `Bearer ${data.access_token}`)
         return apiClient(originalConfig)
