@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import { authApi } from '@/lib/api/auth'
 import { usersApi } from '@/lib/api/users'
 import { clearAccessToken } from '@/lib/api/client'
+import { useAuth } from '@/lib/hooks/useAuth'
 
 export default function ProfilPage() {
   const router = useRouter()
@@ -57,6 +58,7 @@ export default function ProfilPage() {
     } catch { /* ignorer */ }
     clearAccessToken()
     document.cookie = 'access_token=; path=/; max-age=0'
+    useAuth.setState({ user: null, initialized: false })
     router.push('/')
     router.refresh()
   }
