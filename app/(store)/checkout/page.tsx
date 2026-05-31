@@ -32,16 +32,27 @@ export default function CheckoutPage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setSubmitting(true)
+    setSubmitted(true)
+
     const fd = new FormData(e.currentTarget)
     fd.set('cart', JSON.stringify(
       items.map((i) => ({ id: i.id, variantId: i.variantId, variantLabel: i.variantLabel, name: i.name, price: i.price, quantity: i.quantity, slug: i.slug }))
     ))
     if (!fd.get('address')) fd.set('address', '')
-    setSubmitted(true) // show fullscreen loader — hides empty-cart guard during redirect
-    await placeOrder(fd)
-    // placeOrder always redirects; this only runs on unexpected error
-    setSubmitting(false)
-    setSubmitted(false)
+
+    const result = await placeOrder(fd)
+
+    if (!result.ok) {
+      // Erreur : masquer le loader et afficher le message
+      setSubmitting(false)
+      setSubmitted(false)
+      window.location.href = `/checkout?error=${encodeURIComponent(result.error)}`
+      return
+    }
+
+    // Succès : naviguer vers l'URL de redirection
+    // window.location.href fonctionne pour les URLs internes ET externes (GeniusPay)
+    window.location.href = result.redirectUrl
   }
 
   if (submitted) {
