@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { CheckCircle, XCircle, Package, Truck, Mail, ArrowRight, Phone, Lock, CreditCard, Banknote, AlertCircle } from 'lucide-react'
