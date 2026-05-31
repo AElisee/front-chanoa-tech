@@ -42,7 +42,8 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
   }
 
   // Vérifier le statut de paiement GeniusPay si une référence est disponible
-  const paymentReference = referenceParam ?? order?.payment_reference ?? null
+  const orderRaw = order as any
+  const paymentReference = referenceParam ?? orderRaw?.paymentReference ?? orderRaw?.payment_reference ?? null
   let paymentStatus: PaymentStatusResponse | null = null
   if (paymentReference) {
     try {
@@ -72,19 +73,23 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
     )
   }
 
-  const address = order.shipping_address as {
+  // Handle both camelCase (current backend) and snake_case (after snake_case interceptor)
+  const raw = order as any
+  const address = (raw.shippingAddress ?? raw.shipping_address ?? null) as {
     full_name?: string
     email?: string
     phone?: string
     address?: string
     city?: string
-  }
+  } | null
 
   // ── SÉCURITÉ : vérifier la propriété avant d'exposer les PII ────
-  const orderEmail = (order.guest_email ?? address.email ?? '').toLowerCase()
+  const guestEmailRaw: string | null = raw.guestEmail ?? raw.guest_email ?? null
+  const orderEmail = (guestEmailRaw ?? address?.email ?? '').toLowerCase()
+  const ownerUserId: string | null = raw.userId ?? raw.user_id ?? null
   const isOwner =
     // Utilisateur authentifié — propriétaire de la commande
-    (order.user_id && user && order.user_id === user.id) ||
+    (ownerUserId && user && ownerUserId === user.id) ||
     // Utilisateur authentifié avec même email
     (authEmail && orderEmail && authEmail === orderEmail) ||
     // Token signé HMAC (invité) — remplace l'ancien ?email= vulnérable
@@ -124,13 +129,14 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
     product_snapshot: { name?: string; price?: number; slug?: string; brand?: string } | null
   }
 
-  const items = (order.order_items ?? []) as unknown as ItemRow[]
+  // items (camelCase backend) ou order_items (snake_case after interceptor)
+  const items = (raw.items ?? raw.order_items ?? []) as unknown as ItemRow[]
   const shortId = order.id.slice(0, 8).toUpperCase()
-  const guestEmail = address.email ?? null
+  const guestEmail = address?.email ?? null
 
-  // Le champ payment_method n'est pas dans OrderDto standard — on cast
-  const orderAny = order as OrderDto & { payment_method?: string }
-  const isCashOnDelivery = orderAny.payment_method === 'cash_on_delivery'
+  // Handle both camelCase and snake_case for payment method
+  const paymentMethod: string | null = raw.paymentMethod ?? raw.payment_method ?? null
+  const isCashOnDelivery = paymentMethod === 'cash_on_delivery'
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
@@ -270,16 +276,16 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
         </div>
 
         {/* Delivery address */}
-        {(address.city || address.address) && (
+        {(address?.city || address?.address) && (
           <div className="border-t px-5 py-4">
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Livraison
             </p>
             <p className="text-sm">
-              {address.full_name && <span className="font-medium">{address.full_name} — </span>}
-              {address.address}{address.city && `, ${address.city}`}
+              {address?.full_name && <span className="font-medium">{address.full_name} — </span>}
+              {address?.address}{address?.city && `, ${address.city}`}
             </p>
-            {address.phone && (
+            {address?.phone && (
               <p className="mt-0.5 text-sm text-muted-foreground">{address.phone}</p>
             )}
           </div>
