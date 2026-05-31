@@ -7,8 +7,8 @@ export const cartItemSchema = z.object({
   variantId: z.string().uuid().optional(),
   variantLabel: z.string().optional(),
   name: z.string().min(1),
-  price: z.number().nonnegative(),
-  quantity: z.number().int().positive(),
+  price: z.coerce.number().nonnegative(),     // MySQL DECIMAL → string en runtime
+  quantity: z.coerce.number().int().positive(),
   slug: z.string().min(1),
 })
 

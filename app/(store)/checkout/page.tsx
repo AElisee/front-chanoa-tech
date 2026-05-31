@@ -36,7 +36,15 @@ export default function CheckoutPage() {
 
     const fd = new FormData(e.currentTarget)
     fd.set('cart', JSON.stringify(
-      items.map((i) => ({ id: i.id, variantId: i.variantId, variantLabel: i.variantLabel, name: i.name, price: i.price, quantity: i.quantity, slug: i.slug }))
+      items.map((i) => ({
+        id: i.id,
+        variantId: i.variantId,
+        variantLabel: i.variantLabel,
+        name: i.name,
+        price: Number(i.price),
+        quantity: Number(i.quantity),
+        slug: i.slug,
+      }))
     ))
     if (!fd.get('address')) fd.set('address', '')
 
