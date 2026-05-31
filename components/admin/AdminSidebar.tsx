@@ -14,7 +14,8 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { authApi } from '@/lib/api/auth'
+import { clearAccessToken } from '@/lib/api/client'
+import { useAuth } from '@/lib/hooks/useAuth'
 
 const links = [
   { href: '/admin',             label: 'Dashboard',   icon: LayoutDashboard, exact: true },
@@ -30,11 +31,16 @@ export default function AdminSidebar() {
   const router = useRouter()
 
   async function handleLogout() {
+    // 1. Invalider la session NestJS + effacer cookies httpOnly
     try {
-      await authApi.logout()
-    } catch {
-      // Ignorer les erreurs réseau — la déconnexion côté client suffit
-    }
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch { /* ignorer si réseau down */ }
+
+    // 2. Nettoyer token en mémoire, cookie non-httpOnly, store Zustand
+    clearAccessToken()
+    document.cookie = 'access_token=; path=/; max-age=0'
+    useAuth.setState({ user: null, initialized: false })
+
     router.push('/auth/login')
   }
 

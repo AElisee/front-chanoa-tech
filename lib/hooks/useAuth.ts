@@ -87,7 +87,7 @@ export const useAuth = create<AuthStore>((set) => ({
     } catch { /* ignorer si réseau indisponible */ }
     clearAccessToken()
     document.cookie = 'access_token=; path=/; max-age=0'
-    set({ user: null })
+    set({ user: null, initialized: false })
   },
 
   forgotPassword: async (email) => {

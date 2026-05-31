@@ -8,6 +8,7 @@ import { formatFCFA } from '@/lib/utils/format'
 import { verifyOrderToken } from '@/lib/order-token'
 import OtpTrackingBanner from './OtpTrackingBanner'
 import ClearCartOnMount from './ClearCartOnMount'
+import CancelOrderButton from './CancelOrderButton'
 import { cookies } from 'next/headers'
 import { apiClient } from '@/lib/api/client'
 import type { OrderDto } from '@/lib/api/orders'
@@ -308,6 +309,19 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
           Contacter le support
         </a>
       </div>
+
+      {/* Bouton annulation — visible si le statut le permet */}
+      {(() => {
+        const status = order.status
+        const canCancel = isCashOnDelivery
+          ? status === 'pending' || status === 'confirmed'
+          : status === 'pending'
+        return canCancel ? (
+          <div className="mt-4 flex justify-center">
+            <CancelOrderButton orderId={order.id} />
+          </div>
+        ) : null
+      })()}
     </div>
   )
 }

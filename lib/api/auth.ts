@@ -36,7 +36,7 @@ export const authApi = {
     apiClient.post<LoginResponse>('/auth/register', data),
 
   logout: () =>
-    apiClient.post<void>('/auth/logout'),
+    fetch('/api/auth/logout', { method: 'POST' }),
 
   refresh: () =>
     apiClient.post<{ accessToken: string }>('/auth/refresh'),
