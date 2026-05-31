@@ -5,7 +5,7 @@ export interface UserDto {
   email: string
   name: string
   phone: string | null
-  role: 'user' | 'admin'
+  role: 'admin' | 'client' | 'livreur'
   createdAt: string
   updatedAt: string
 }

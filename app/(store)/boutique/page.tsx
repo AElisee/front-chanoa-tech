@@ -86,10 +86,31 @@ export default async function BoutiquePage({ searchParams }: Props) {
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
-  // ── Marques uniques depuis les produits chargés ──────────────────
-  const brands = [
-    ...new Set(products.map((p) => p.brand).filter((b): b is string => Boolean(b))),
-  ].sort()
+  // ── Marques globales — appel sans pagination pour que la sidebar
+  //    reste cohérente quelle que soit la page courante ───────────────
+  let brands: string[] = []
+  try {
+    const brandsRes = await apiClient.get<ProductListResponse>('/produits', {
+      params: {
+        limit: 500,
+        ...(categoryId ? { categoryId } : {}),
+        ...(q?.trim() ? { search: q.trim() } : {}),
+      },
+      headers,
+    })
+    brands = [
+      ...new Set(
+        (brandsRes.data.data ?? [])
+          .map((p) => p.brand)
+          .filter((b): b is string => Boolean(b)),
+      ),
+    ].sort()
+  } catch {
+    // Fallback : marques de la page courante
+    brands = [
+      ...new Set(products.map((p) => p.brand).filter((b): b is string => Boolean(b))),
+    ].sort()
+  }
 
   const filteredProducts = products
 
@@ -122,7 +143,7 @@ export default async function BoutiquePage({ searchParams }: Props) {
                 {brands.map((b) => (
                   <li key={b}>
                     <Link
-                      href={`?${new URLSearchParams({ ...(categorie ? { categorie } : {}), ...(q ? { q } : {}), marque: marque === b ? '' : b }).toString()}`}
+                      href={`?${new URLSearchParams({ ...(categorie ? { categorie } : {}), ...(q ? { q } : {}), ...(tri !== 'recent' ? { tri } : {}), marque: marque === b ? '' : b }).toString()}`}
                       className={`block rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-muted ${
                         marque === b ? 'bg-primary/10 font-medium text-primary' : 'text-foreground'
                       }`}
@@ -166,6 +187,7 @@ export default async function BoutiquePage({ searchParams }: Props) {
               <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
+                basePath="/boutique"
                 searchParams={{
                   ...(categorie ? { categorie } : {}),
                   ...(q ? { q } : {}),

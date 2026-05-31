@@ -111,9 +111,12 @@ export default function ImageUploader({
           result = await mediaApi.uploadTemporary(processedFile, token)
         }
 
+        // NEXT_PUBLIC_SITE_URL = http://host (sans /api) pour que les URLs
+        // d'upload correspondent aux remotePatterns /uploads/** de next.config.ts
+        const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/$/, '')
         const fullUrl = result.url.startsWith('http')
           ? result.url
-          : `${process.env.NEXT_PUBLIC_API_URL}${result.url}`
+          : `${siteUrl}${result.url}`
 
         newUrls.push(fullUrl)
       } catch (err) {

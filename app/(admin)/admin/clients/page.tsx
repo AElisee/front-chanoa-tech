@@ -66,7 +66,7 @@ export default async function AdminClientsPage({ searchParams }: Props) {
   type ClientRow = UserDto & { orders: OrderDto[] }
 
   let clients: ClientRow[] = allUsers
-    .filter((u) => u.role === 'user')
+    .filter((u) => u.role === 'client')
     .map((u) => ({ ...u, orders: ordersByUser.get(u.id) ?? [] }))
 
   if (q) {

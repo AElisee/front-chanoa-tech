@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
-import { Settings, User, LogOut } from 'lucide-react'
+import { Settings, User } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { getAuthenticatedUser } from '@/lib/auth-server'
 import ParametresClient from './ParametresClient'
+import LogoutButton from './LogoutButton'
 
 export const metadata: Metadata = { title: 'Paramètres — Admin' }
 
@@ -35,7 +36,7 @@ export default async function AdminParametresPage({ searchParams }: Props) {
         </div>
       )}
 
-      {/* Admin profile */}
+      {/* Admin profile + password */}
       <section className="mb-6 rounded-xl border bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b px-6 py-4">
           <User className="h-4 w-4 text-muted-foreground" />
@@ -44,7 +45,7 @@ export default async function AdminParametresPage({ searchParams }: Props) {
         <ParametresClient userId={user.id} userEmail={user.email} />
       </section>
 
-      {/* Info */}
+      {/* Info système */}
       <section className="rounded-xl border bg-white shadow-sm">
         <div className="border-b px-6 py-4">
           <h2 className="font-semibold">Informations système</h2>
@@ -61,13 +62,7 @@ export default async function AdminParametresPage({ searchParams }: Props) {
           ))}
         </div>
         <div className="border-t p-4">
-          <a
-            href="/api/auth/logout"
-            className="flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium text-destructive hover:bg-red-50 w-fit"
-          >
-            <LogOut className="h-4 w-4" />
-            Se déconnecter
-          </a>
+          <LogoutButton />
         </div>
       </section>
     </div>

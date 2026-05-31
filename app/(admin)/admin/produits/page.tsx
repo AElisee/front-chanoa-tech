@@ -219,6 +219,7 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
       <Pagination
         currentPage={currentPage}
         totalPages={totalPages}
+        basePath="/admin/produits"
         searchParams={{
           ...(q ? { q } : {}),
           ...(categorie ? { categorie } : {}),

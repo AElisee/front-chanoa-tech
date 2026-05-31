@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { usersApi } from '@/lib/api/users'
-import { authApi } from '@/lib/api/auth'
+import { apiClient } from '@/lib/api/client'
 
 interface Props {
   userId: string
@@ -52,11 +52,13 @@ export default function ParametresClient({ userId, userEmail }: Props) {
     setSavingPassword(true)
     setPasswordError(null)
     try {
-      // TODO: implémenter PUT /auth/change-password dans le backend NestJS si besoin
-      await authApi.resetPassword('', password)
+      // PATCH /user/:id accepte { password } — UserService hache automatiquement
+      await apiClient.patch(`/user/${userId}`, { password })
+      setPassword('')
       router.push('/admin/parametres?success=1')
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erreur lors du changement de mot de passe.'
+      const axiosErr = err as { response?: { data?: { message?: string } } }
+      const msg = axiosErr.response?.data?.message ?? 'Erreur lors du changement de mot de passe.'
       setPasswordError(msg)
     } finally {
       setSavingPassword(false)

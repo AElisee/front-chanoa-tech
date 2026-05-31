@@ -15,8 +15,8 @@ export default function SortSelect({ value }: { value: string }) {
       className="rounded-md border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
     >
       <option value="recent">Plus récents</option>
-      <option value="prix-asc">Prix croissant</option>
-      <option value="prix-desc">Prix décroissant</option>
+      <option value="price_asc">Prix croissant</option>
+      <option value="price_desc">Prix décroissant</option>
     </select>
   )
 }
