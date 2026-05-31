@@ -2,6 +2,7 @@ import ProductCard from '@/components/store/ProductCard'
 import CategoryFilter from '@/components/store/CategoryFilter'
 import { SearchBar } from '@/components/store/SearchBar'
 import SortSelect from '@/components/store/SortSelect'
+import Pagination from '@/components/ui/Pagination'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
@@ -162,44 +163,16 @@ export default async function BoutiquePage({ searchParams }: Props) {
                 ))}
               </div>
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="mt-10 flex flex-wrap justify-center gap-2">
-                  {currentPage > 1 && (
-                    <a
-                      href={`?${new URLSearchParams({ ...params, page: String(currentPage - 1) })}`}
-                      className="flex h-9 items-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted"
-                    >
-                      ← Précédent
-                    </a>
-                  )}
-                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                    const p = i + 1
-                    return (
-                      <a
-                        key={p}
-                        href={`?${new URLSearchParams({ ...params, page: String(p) })}`}
-                        className={`flex h-9 w-9 items-center justify-center rounded-md border text-sm font-medium transition-colors ${
-                          p === currentPage
-                            ? 'border-primary bg-primary text-primary-foreground'
-                            : 'hover:bg-muted'
-                        }`}
-                      >
-                        {p}
-                      </a>
-                    )
-                  })}
-                  {totalPages > 7 && <span className="flex h-9 items-center px-2 text-muted-foreground">…</span>}
-                  {currentPage < totalPages && (
-                    <a
-                      href={`?${new URLSearchParams({ ...params, page: String(currentPage + 1) })}`}
-                      className="flex h-9 items-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted"
-                    >
-                      Suivant →
-                    </a>
-                  )}
-                </div>
-              )}
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                searchParams={{
+                  ...(categorie ? { categorie } : {}),
+                  ...(q ? { q } : {}),
+                  ...(marque ? { marque } : {}),
+                  ...(tri !== 'recent' ? { tri } : {}),
+                }}
+              />
             </>
           )}
         </div>

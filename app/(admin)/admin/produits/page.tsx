@@ -8,6 +8,7 @@ import { redirect } from 'next/navigation'
 import { formatFCFA } from '@/lib/utils/format'
 import { cookies } from 'next/headers'
 import { apiClient } from '@/lib/api/client'
+import Pagination from '@/components/ui/Pagination'
 import type { ProductListResponse, ProductDto } from '@/lib/api/products'
 import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
 
@@ -215,43 +216,14 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
         </div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          {currentPage > 1 && (
-            <Link
-              href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(categorie ? { categorie } : {}), page: String(currentPage - 1) })}`}
-              className="flex h-9 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
-            >
-              ← Précédent
-            </Link>
-          )}
-          {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-            const p = i + 1
-            return (
-              <Link
-                key={p}
-                href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(categorie ? { categorie } : {}), page: String(p) })}`}
-                className={`flex h-9 w-9 items-center justify-center rounded-md border text-sm font-medium transition-colors ${
-                  p === currentPage
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'hover:bg-muted'
-                }`}
-              >
-                {p}
-              </Link>
-            )
-          })}
-          {currentPage < totalPages && (
-            <Link
-              href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(categorie ? { categorie } : {}), page: String(currentPage + 1) })}`}
-              className="flex h-9 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
-            >
-              Suivant →
-            </Link>
-          )}
-        </div>
-      )}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        searchParams={{
+          ...(q ? { q } : {}),
+          ...(categorie ? { categorie } : {}),
+        }}
+      />
     </div>
   )
 }

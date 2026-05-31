@@ -8,12 +8,15 @@ import { redirect } from 'next/navigation'
 import { formatFCFA } from '@/lib/utils/format'
 import { cookies } from 'next/headers'
 import { apiClient } from '@/lib/api/client'
+import Pagination from '@/components/ui/Pagination'
 import type { OrderListResponse, OrderDto } from '@/lib/api/orders'
 
 export const metadata: Metadata = { title: 'Commandes — Admin' }
 
+const PAGE_SIZE = 25
+
 const STATUSES: { value: string; label: string }[] = [
-  { value: '', label: 'Tous les statuts' },
+  { value: '', label: 'Tous' },
   { value: 'pending', label: 'En attente' },
   { value: 'confirmed', label: 'Confirmé' },
   { value: 'processing', label: 'En préparation' },
@@ -23,7 +26,7 @@ const STATUSES: { value: string; label: string }[] = [
 ]
 
 interface Props {
-  searchParams: Promise<{ status?: string; q?: string; updated?: string }>
+  searchParams: Promise<{ status?: string; q?: string; page?: string; updated?: string }>
 }
 
 export default async function AdminCommandesPage({ searchParams }: Props) {
@@ -31,26 +34,49 @@ export default async function AdminCommandesPage({ searchParams }: Props) {
   if (!user) redirect('/auth/login')
   if (user.role !== 'admin') redirect('/')
 
-  const { status, q, updated } = await searchParams
+  const { status, q, page = '1', updated } = await searchParams
+  const currentPage = Math.max(1, Number(page))
 
   const cookieStore = await cookies()
   const token = cookieStore.get('access_token')?.value
   const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
-  let orders: OrderDto[] = []
+  // Charger toutes les commandes puis filtrer (l'API ne supporte pas encore les filtres status/search)
+  let allOrders: OrderDto[] = []
+  let serverTotal = 0
   try {
-    const apiParams: Record<string, string | number> = { limit: 500 }
-    // Note : filtrage par status sera géré côté client (l'API peut ne pas exposer ce filtre)
-
     const res = await apiClient.get<OrderListResponse>('/commande', {
-      params: apiParams,
+      params: { limit: 500 },
       headers,
     })
-    orders = res.data.data ?? []
+    allOrders = res.data.data ?? []
+    serverTotal = res.data.total ?? allOrders.length
   } catch (err: any) {
-    console.error('Admin orders query error — status:', err?.response?.status)
-    console.error('Admin orders query error — body:', JSON.stringify(err?.response?.data))
+    console.error('[admin/commandes] fetch error:', err?.response?.status)
   }
+
+  // Filtrage côté serveur (sur les données chargées)
+  let filtered = allOrders
+  if (status) {
+    filtered = filtered.filter((o) => o.status === status)
+  }
+  if (q?.trim()) {
+    const lower = q.toLowerCase()
+    filtered = filtered.filter((o) => {
+      const addr = o.shipping_address as any
+      return (
+        o.id.toLowerCase().includes(lower) ||
+        addr?.full_name?.toLowerCase().includes(lower) ||
+        addr?.email?.toLowerCase().includes(lower) ||
+        addr?.phone?.includes(lower) ||
+        o.guest_email?.toLowerCase().includes(lower)
+      )
+    })
+  }
+
+  const total = filtered.length
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const list = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   type OrderRow = {
     id: string
@@ -62,80 +88,66 @@ export default async function AdminCommandesPage({ searchParams }: Props) {
     shipping_address: { full_name?: string; email?: string; phone?: string } | null
   }
 
-  let list: OrderRow[] = orders as OrderRow[]
-
-  // Filtrage par statut
-  if (status) {
-    list = list.filter((o) => o.status === status)
-  }
-
-  // Recherche client-side
-  if (q) {
-    const lower = q.toLowerCase()
-    list = list.filter((o) => {
-      const addr = o.shipping_address
-      return (
-        o.id.toLowerCase().includes(lower) ||
-        addr?.full_name?.toLowerCase().includes(lower) ||
-        addr?.email?.toLowerCase().includes(lower) ||
-        addr?.phone?.includes(lower) ||
-        o.guest_email?.toLowerCase().includes(lower)
-      )
-    })
-  }
-
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">Commandes</h1>
-        <span className="text-sm text-muted-foreground">{list.length} résultat{list.length > 1 ? 's' : ''}</span>
+        <div>
+          <h1 className="text-2xl font-bold">Commandes</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {total} résultat{total > 1 ? 's' : ''}
+            {serverTotal > 500 && <span className="ml-1 text-amber-600">(affiché sur {serverTotal} total)</span>}
+          </p>
+        </div>
       </div>
 
       {updated && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
-          <span className="text-lg">✓</span>
+          <span>✓</span>
           Statut de la commande mis à jour avec succès.
         </div>
       )}
 
-      {/* Status filter tabs */}
+      {/* Onglets statut */}
       <div className="mb-4 flex flex-wrap gap-2">
         {STATUSES.map((s) => {
           const isActive = (status ?? '') === s.value
+          const href = new URLSearchParams()
+          if (s.value) href.set('status', s.value)
+          if (q) href.set('q', q)
           return (
-            <Link
+            <a
               key={s.value}
-              href={s.value ? `/admin/commandes?status=${s.value}${q ? `&q=${q}` : ''}` : `/admin/commandes${q ? `?q=${q}` : ''}`}
+              href={`/admin/commandes?${href}`}
               className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                 isActive
                   ? 'bg-primary text-white shadow-sm'
-                  : 'bg-white text-muted-foreground border hover:bg-muted hover:text-foreground'
+                  : 'border bg-white text-muted-foreground hover:bg-muted hover:text-foreground'
               }`}
             >
               {s.label}
-            </Link>
+            </a>
           )
         })}
       </div>
 
-      {/* Search */}
+      {/* Recherche */}
       <form method="GET" className="mb-5">
-        <input type="hidden" name="status" value={status ?? ''} />
+        {status && <input type="hidden" name="status" value={status} />}
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             name="q"
             defaultValue={q}
-            placeholder="Rechercher par nom, email, téléphone, ID…"
+            placeholder="Nom, email, téléphone, ID commande…"
             className="w-full rounded-lg border bg-white py-2.5 pl-9 pr-3 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
       </form>
 
-      {/* Orders list */}
+      {/* Liste */}
       <div className="space-y-3">
         {list.length > 0 ? (
-          list.map((order) => {
+          (list as OrderRow[]).map((order) => {
             const addr = order.shipping_address
             const clientName = addr?.full_name ?? addr?.email ?? order.guest_email ?? 'Client invité'
             const clientPhone = addr?.phone ?? null
@@ -147,17 +159,16 @@ export default async function AdminCommandesPage({ searchParams }: Props) {
                 href={`/admin/commandes/${order.id}`}
                 className="flex items-center gap-4 rounded-xl border bg-white p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
               >
-                {/* Order # */}
-                <div className="hidden sm:flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-mono text-xs font-bold text-primary">
+                <div className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-mono text-xs font-bold text-primary sm:flex">
                   #{order.id.slice(0, 4).toUpperCase()}
                 </div>
-
-                {/* Client info */}
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="truncate font-semibold text-sm">{clientName}</p>
+                    <p className="truncate text-sm font-semibold">{clientName}</p>
                     {isGuest && (
-                      <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">invité</span>
+                      <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                        invité
+                      </span>
                     )}
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
@@ -170,13 +181,9 @@ export default async function AdminCommandesPage({ searchParams }: Props) {
                     </span>
                   </div>
                 </div>
-
-                {/* Total */}
                 <div className="shrink-0 text-right">
-                  <p className="font-bold text-sm">{formatFCFA(order.total)}</p>
+                  <p className="text-sm font-bold">{formatFCFA(order.total)}</p>
                 </div>
-
-                {/* Status */}
                 <div className="shrink-0">
                   <OrderStatusBadge status={order.status as OrderStatus} />
                 </div>
@@ -190,6 +197,16 @@ export default async function AdminCommandesPage({ searchParams }: Props) {
           </div>
         )}
       </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        searchParams={{
+          ...(status ? { status } : {}),
+          ...(q ? { q } : {}),
+        }}
+        basePath="/admin/commandes"
+      />
     </div>
   )
 }

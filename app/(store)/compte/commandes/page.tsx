@@ -6,31 +6,42 @@ import { formatFCFA } from '@/lib/utils/format'
 import type { OrderStatus } from '@/lib/api/orders'
 import { cookies } from 'next/headers'
 import { apiClient } from '@/lib/api/client'
+import Pagination from '@/components/ui/Pagination'
 import type { OrderListResponse, OrderDto } from '@/lib/api/orders'
 
 export const metadata: Metadata = { title: 'Mes commandes — Chanoa Tech' }
 
-export default async function CommandesPage() {
+const PAGE_SIZE = 10
+
+interface Props {
+  searchParams: Promise<{ page?: string }>
+}
+
+export default async function CommandesPage({ searchParams }: Props) {
   const user = await getAuthenticatedUser()
   if (!user) redirect('/auth/login?redirect=/compte/commandes')
+
+  const { page = '1' } = await searchParams
+  const currentPage = Math.max(1, Number(page))
 
   const cookieStore = await cookies()
   const token = cookieStore.get('access_token')?.value
   const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
   let orders: OrderDto[] = []
+  let total = 0
   try {
     const res = await apiClient.get<OrderListResponse>('/commande', {
-      params: { limit: 100 },
+      params: { page: currentPage, limit: PAGE_SIZE },
       headers,
     })
     orders = res.data.data ?? []
+    total = res.data.total ?? 0
   } catch {
     // silencieux
   }
 
-  // Tri par date décroissante (l'API renvoie déjà trié, mais par sécurité)
-  orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  const totalPages = Math.ceil(total / PAGE_SIZE)
 
   type OrderItemRow = {
     id: string
@@ -41,17 +52,27 @@ export default async function CommandesPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-      <h1 className="mb-6 text-2xl font-bold">Mes commandes</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Mes commandes</h1>
+        {total > 0 && (
+          <span className="text-sm text-muted-foreground">
+            {total} commande{total > 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
 
       {orders.length === 0 ? (
-        <p className="text-muted-foreground">Vous n&apos;avez encore passé aucune commande.</p>
+        <p className="text-muted-foreground">
+          {currentPage > 1
+            ? 'Aucune commande sur cette page.'
+            : "Vous n'avez encore passé aucune commande."}
+        </p>
       ) : (
         <div className="space-y-4">
           {orders.map((order) => {
             const items = (order.order_items ?? []) as OrderItemRow[]
             return (
               <div key={order.id} className="rounded-xl border bg-white shadow-sm">
-                {/* Header */}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3">
                   <div>
                     <p className="text-sm font-semibold">
@@ -70,12 +91,16 @@ export default async function CommandesPage() {
                     <OrderStatusBadge status={order.status as OrderStatus} />
                   </div>
                 </div>
-
-                {/* Items */}
                 <div className="divide-y px-5">
                   {items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between py-3 text-sm">
-                      <span>{(item.product_snapshot as { name?: string })?.name ?? 'Produit'} × {item.quantity}</span>
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between py-3 text-sm"
+                    >
+                      <span>
+                        {(item.product_snapshot as { name?: string })?.name ?? 'Produit'} ×{' '}
+                        {item.quantity}
+                      </span>
                       <span className="font-medium">
                         {formatFCFA(item.unit_price * item.quantity)}
                       </span>
@@ -87,6 +112,12 @@ export default async function CommandesPage() {
           })}
         </div>
       )}
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        basePath="/compte/commandes"
+      />
     </div>
   )
 }

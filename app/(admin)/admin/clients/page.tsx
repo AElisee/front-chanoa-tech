@@ -6,13 +6,16 @@ import { redirect } from 'next/navigation'
 import { formatFCFA } from '@/lib/utils/format'
 import { cookies } from 'next/headers'
 import { apiClient } from '@/lib/api/client'
+import Pagination from '@/components/ui/Pagination'
 import type { UserDto, UserListResponse } from '@/lib/api/users'
 import type { OrderDto, OrderListResponse } from '@/lib/api/orders'
 
 export const metadata: Metadata = { title: 'Clients — Admin' }
 
+const PAGE_SIZE = 24
+
 interface Props {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; page?: string }>
 }
 
 export default async function AdminClientsPage({ searchParams }: Props) {
@@ -20,7 +23,8 @@ export default async function AdminClientsPage({ searchParams }: Props) {
   if (!user) redirect('/auth/login')
   if (user.role !== 'admin') redirect('/')
 
-  const { q } = await searchParams
+  const { q, page = '1' } = await searchParams
+  const currentPage = Math.max(1, Number(page))
 
   const cookieStore = await cookies()
   const token = cookieStore.get('access_token')?.value
@@ -77,6 +81,8 @@ export default async function AdminClientsPage({ searchParams }: Props) {
   clients.sort((a, b) => b.orders.length - a.orders.length)
 
   const totalClients      = clients.length
+  const totalPages        = Math.ceil(totalClients / PAGE_SIZE)
+  const pagedClients      = clients.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
   const clientsWithOrders = clients.filter((c) => c.orders.length > 0).length
   const totalRevenue      = clients.reduce(
     (s, c) => s + c.orders.reduce((ss, o) => ss + Number(o.total), 0),
@@ -119,7 +125,7 @@ export default async function AdminClientsPage({ searchParams }: Props) {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {clients.map((client) => {
+          {pagedClients.map((client) => {
             const orderCount = client.orders.length
             const totalSpent = client.orders.reduce((s, o) => s + Number(o.total), 0)
             const lastOrder  = [...client.orders].sort(
@@ -183,6 +189,13 @@ export default async function AdminClientsPage({ searchParams }: Props) {
           })}
         </div>
       )}
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        searchParams={{ ...(q ? { q } : {}) }}
+        basePath="/admin/clients"
+      />
     </div>
   )
 }
