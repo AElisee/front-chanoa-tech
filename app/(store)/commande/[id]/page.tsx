@@ -244,7 +244,7 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
       </div>
 
       {/* OTP tracking banner (client component) */}
-      {guestEmail && <OtpTrackingBanner email={guestEmail} />}
+      {guestEmail && !user && <OtpTrackingBanner email={guestEmail} />}
 
       {/* Order details */}
       <div className="rounded-xl border bg-white shadow-sm">
