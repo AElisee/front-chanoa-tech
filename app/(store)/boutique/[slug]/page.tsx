@@ -9,7 +9,7 @@ import ProductDetailClient from '@/components/store/ProductDetailClient'
 import ImageGallery from '@/components/store/ImageGallery'
 import { cookies } from 'next/headers'
 import { apiClient } from '@/lib/api/client'
-import type { ProductDto, ProductListResponse } from '@/lib/api/products'
+import type { ProductDto, ProductListResponse, VariantDto } from '@/lib/api/products'
 import type { CategoryDto } from '@/lib/api/categories'
 
 interface Props {
@@ -59,6 +59,15 @@ export default async function ProductPage({ params }: Props) {
 
   const product = await getProductBySlug(slug, headers)
   if (!product || !product.is_active) notFound()
+
+  // Variantes du produit
+  let variants: VariantDto[] = []
+  try {
+    const res = await apiClient.get<VariantDto[]>(`/produits/${product.id}/variants`, { headers })
+    variants = (res.data ?? []).filter((v) => v.is_active).sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at))
+  } catch {
+    // silencieux
+  }
 
   // Utilise categoryId (retourné par le backend) avec fallback sur category_id
   const catId = product.categoryId ?? product.category_id ?? null
@@ -161,7 +170,7 @@ export default async function ProductPage({ params }: Props) {
 
           {/* Partie interactive : prix, variantes, panier */}
           <div className="mt-5">
-            <ProductDetailClient product={product as never} variants={[]} />
+            <ProductDetailClient product={product as never} variants={variants as never} />
           </div>
 
           {/* Bande de confiance */}
