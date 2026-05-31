@@ -193,9 +193,9 @@ export default async function AdminProduitsPage({ searchParams }: Props) {
                         {p.brand}
                       </p>
                     )}
-                    {p.category_id && categoryMap.get(p.category_id) && (
+                    {(p.categoryId ?? p.category_id) && categoryMap.get((p.categoryId ?? p.category_id)!) && (
                       <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                        {categoryMap.get(p.category_id)}
+                        {categoryMap.get((p.categoryId ?? p.category_id)!)}
                       </span>
                     )}
                   </div>

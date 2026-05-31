@@ -33,7 +33,8 @@ export interface ProductDto {
   price_eur: number | null
   compare_price: number | null
   stock: number
-  category_id: string | null
+  categoryId: string | null
+  category_id?: string | null
   images: string[]
   brand: string | null
   model: string | null
