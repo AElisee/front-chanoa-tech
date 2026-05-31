@@ -47,7 +47,7 @@ export async function updateProduct(id: string, formData: FormData) {
   const { name, description, brand, model, sku, price, price_eur, compare_price, stock, category_id, is_active, images: validImages } = result.data
 
   try {
-    await apiClient.patch(`/products/${id}`, {
+    await apiClient.patch(`/produits/${id}`, {
       name,
       description,
       brand,
@@ -80,7 +80,7 @@ export async function toggleProductActive(id: string, isActive: boolean) {
   const headers = await getAdminHeaders()
 
   try {
-    await apiClient.patch(`/products/${id}`, { is_active: isActive }, { headers })
+    await apiClient.patch(`/produits/${id}`, { is_active: isActive }, { headers })
   } catch {
     // silencieux
   }
@@ -97,7 +97,7 @@ export async function deleteProduct(id: string) {
   const headers = await getAdminHeaders()
 
   try {
-    await apiClient.delete(`/products/${id}`, { headers })
+    await apiClient.delete(`/produits/${id}`, { headers })
   } catch (err: unknown) {
     const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Erreur lors de la suppression'
     redirect(`/admin/produits/${id}?error=${encodeURIComponent(message)}`)
