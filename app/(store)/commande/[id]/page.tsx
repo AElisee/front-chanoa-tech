@@ -114,7 +114,7 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
   type ItemRow = {
     quantity: number
     unit_price: number
-    product_snapshot: { name: string; price: number; slug: string }
+    product_snapshot: { name?: string; price?: number; slug?: string; brand?: string } | null
   }
 
   const items = (order.order_items ?? []) as unknown as ItemRow[]
@@ -244,7 +244,7 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
           {items.map((item, i) => (
             <div key={i} className="flex items-center justify-between py-3">
               <div>
-                <p className="text-sm font-medium">{item.product_snapshot.name}</p>
+                <p className="text-sm font-medium">{item.product_snapshot?.name ?? 'Produit'}</p>
                 <p className="text-xs text-muted-foreground">
                   {formatFCFA(item.unit_price)} × {item.quantity}
                 </p>

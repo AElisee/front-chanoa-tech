@@ -29,7 +29,7 @@ export async function updateOrderStatus(formData: FormData) {
   const headers = await getAdminHeaders()
 
   try {
-    await apiClient.patch(`/orders/${id}`, { status }, { headers })
+    await apiClient.patch(`/commande/${id}`, { status }, { headers })
   } catch (err) {
     console.error('updateOrderStatus:', err)
   }
@@ -92,7 +92,7 @@ export async function updateOrderNotes(formData: FormData) {
   const headers = await getAdminHeaders()
 
   try {
-    await apiClient.patch(`/orders/${id}`, { notes }, { headers })
+    await apiClient.patch(`/commande/${id}`, { notes }, { headers })
   } catch (err) {
     console.error('updateOrderNotes:', err)
   }
