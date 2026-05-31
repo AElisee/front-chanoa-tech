@@ -80,16 +80,12 @@ export const useAuth = create<AuthStore>((set) => ({
   },
 
   logout: async () => {
+    // La route /api/auth/logout lit le refresh_token httpOnly, invalide la session
+    // NestJS et efface les deux cookies en une seule requête
     try {
-      await authApi.logout()
-    } catch { /* ignorer si API down */ }
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch { /* ignorer si réseau indisponible */ }
     clearAccessToken()
-    await fetch('/api/auth/set-cookie', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: null }),
-    })
-    // Supprimer le cookie access_token
     document.cookie = 'access_token=; path=/; max-age=0'
     set({ user: null })
   },

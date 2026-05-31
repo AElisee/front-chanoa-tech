@@ -53,11 +53,10 @@ export default function ProfilPage() {
 
   async function handleSignOut() {
     try {
-      await authApi.logout()
-    } catch {
-      // ignorer les erreurs de logout
-    }
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch { /* ignorer */ }
     clearAccessToken()
+    document.cookie = 'access_token=; path=/; max-age=0'
     router.push('/')
     router.refresh()
   }
