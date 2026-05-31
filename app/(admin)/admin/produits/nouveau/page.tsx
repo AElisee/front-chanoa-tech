@@ -144,7 +144,7 @@ export default async function AdminProduitNewPage({ searchParams }: Props) {
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Images produit
           </h2>
-          <ImageUploader initialImages={[]} />
+          <ImageUploader initialImages={[]} token={token} />
         </section>
 
         {/* Visibility */}

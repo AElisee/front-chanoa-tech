@@ -10,13 +10,10 @@ interface Props {
   initialImages: string[]
   inputName?: string
   maxImages?: number
-  /** Target size for auto-crop. Default: 800x800 (1:1 square) */
   targetSize?: number
-  /**
-   * ID du produit existant. Si fourni, l'image est liée au produit en base.
-   * Si absent (nouveau produit), l'image est uploadée de façon temporaire.
-   */
   productId?: string
+  /** Token JWT passé depuis le server component pour éviter le 401 après refresh de page */
+  token?: string
 }
 
 /**
@@ -76,6 +73,7 @@ export default function ImageUploader({
   maxImages = 5,
   targetSize = 800,
   productId,
+  token,
 }: Props) {
   const [images, setImages] = useState<string[]>(initialImages)
   const [uploading, setUploading] = useState(false)
@@ -108,9 +106,9 @@ export default function ImageUploader({
       try {
         let result: { url: string }
         if (productId) {
-          result = await mediaApi.uploadProductImage(productId, processedFile)
+          result = await mediaApi.uploadProductImage(productId, processedFile, token)
         } else {
-          result = await mediaApi.uploadTemporary(processedFile)
+          result = await mediaApi.uploadTemporary(processedFile, token)
         }
 
         const fullUrl = result.url.startsWith('http')

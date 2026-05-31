@@ -258,7 +258,7 @@ export default async function AdminProduitEditPage({ params, searchParams }: Pro
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Images produit
               </h2>
-              <ImageUploader initialImages={product.images ?? []} productId={id} />
+              <ImageUploader initialImages={product.images ?? []} productId={id} token={token} />
             </section>
 
             {/* Preserve is_active when saving other fields (visibility is managed via separate form in sidebar) */}
