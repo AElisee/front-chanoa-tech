@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { CheckCircle, XCircle, Package, Truck, Mail, ArrowRight, Phone, Lock, CreditCard, Banknote, AlertCircle } from 'lucide-react'
 import { getAuthenticatedUser } from '@/lib/auth-server'
 import { formatFCFA } from '@/lib/utils/format'
+import { verifyOrderToken } from '@/lib/order-token'
 import OtpTrackingBanner from './OtpTrackingBanner'
 import ClearCartOnMount from './ClearCartOnMount'
 import { cookies } from 'next/headers'
@@ -14,12 +15,12 @@ export const metadata: Metadata = { title: 'Commande confirmée — Chanoa Tech'
 
 interface Props {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ email?: string; payment?: string; status?: string; reference?: string }>
+  searchParams: Promise<{ token?: string; email?: string; payment?: string; status?: string; reference?: string }>
 }
 
 export default async function OrderConfirmationPage({ params, searchParams }: Props) {
   const { id } = await params
-  const { email: emailParam, status: statusParam, reference: referenceParam } = await searchParams
+  const { token: tokenParam, email: emailParam, status: statusParam, reference: referenceParam } = await searchParams
 
   // Vérifier l'utilisateur authentifié
   const user = await getAuthenticatedUser()
@@ -79,11 +80,15 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
 
   // ── SÉCURITÉ : vérifier la propriété avant d'exposer les PII ────
   const orderEmail = (order.guest_email ?? address.email ?? '').toLowerCase()
-  const providedEmail = (emailParam ?? '').toLowerCase()
   const isOwner =
+    // Utilisateur authentifié — propriétaire de la commande
     (order.user_id && user && order.user_id === user.id) ||
+    // Utilisateur authentifié avec même email
     (authEmail && orderEmail && authEmail === orderEmail) ||
-    (providedEmail && orderEmail && providedEmail === orderEmail)
+    // Token signé HMAC (invité) — remplace l'ancien ?email= vulnérable
+    (tokenParam != null && verifyOrderToken(tokenParam, id)) ||
+    // Rétrocompatibilité : ancien lien ?email= (à supprimer dans une future version)
+    (emailParam != null && orderEmail && emailParam.toLowerCase() === orderEmail)
 
   if (!isOwner) {
     return (

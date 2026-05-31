@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { checkoutSchema } from '@/lib/schemas'
 import { apiClient } from '@/lib/api/client'
+import { generateOrderToken } from '@/lib/order-token'
 import type { OrderDto } from '@/lib/api/orders'
 import type { InitiatePaymentResponse } from '@/lib/api/payment'
 
@@ -77,7 +78,7 @@ export async function placeOrder(formData: FormData) {
 
   // ── Paiement à la livraison — pas de redirection de paiement ─
   if (payment_method === 'cash_on_delivery') {
-    redirect(`/commande/${order.id}?email=${encodeURIComponent(email ?? '')}`)
+    redirect(`/commande/${order.id}?token=${generateOrderToken(order.id)}`)
   }
 
   // ── Initier le paiement GeniusPay ────────────────────────────
@@ -100,5 +101,5 @@ export async function placeOrder(formData: FormData) {
   }
 
   // Fallback : la commande est créée, le paiement peut être relancé
-  redirect(`/commande/${order.id}?email=${encodeURIComponent(email ?? '')}`)
+  redirect(`/commande/${order.id}?token=${generateOrderToken(order.id)}`)
 }
