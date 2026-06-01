@@ -18,9 +18,9 @@ const nextConfig: NextConfig = {
     // Allow external image domains used for product images
     remotePatterns: [
       // Uploads servis par NestJS en local (dev — port 3000)
-      { protocol: 'http', hostname: 'localhost', port: '3000', pathname: '/uploads/**' },
+      { protocol: 'http', hostname: 'localhost', port: '3200', pathname: '/uploads/**' },
       // Uploads servis par NestJS sur le VPS (port 3000 direct)
-      { protocol: 'http', hostname: '148.230.112.175', port: '3000', pathname: '/uploads/**' },
+      { protocol: 'http', hostname: '148.230.112.175', port: '3200', pathname: '/uploads/**' },
       // Tout domaine HTTPS (CDN, stockage distant)
       { protocol: 'https', hostname: '**' },
     ],
