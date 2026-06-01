@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -72,11 +73,75 @@ export default async function AdminProduitEditPage({
       (a, b) =>
         a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at),
     );
+=======
+import { notFound, redirect } from 'next/navigation'
+import Link from 'next/link'
+import Image from 'next/image'
+import type { Metadata } from 'next'
+import { ChevronRight, CheckCircle, XCircle, Package } from 'lucide-react'
+import { getAuthenticatedUser } from '@/lib/auth-server'
+import { formatFCFA, formatEUR } from '@/lib/utils/format'
+import { updateProduct, createVariant, updateVariant, deleteVariant } from './actions'
+import DeleteProductButton from '@/components/admin/DeleteProductButton'
+import ImageUploader from '@/components/admin/ImageUploader'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { ProductDto, VariantDto } from '@/lib/api/products'
+import type { CategoryListResponse, CategoryDto } from '@/lib/api/categories'
+
+interface Props {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ success?: string; error?: string }>
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
+  try {
+    const res = await apiClient.get<ProductDto>(`/produits/${id}`, { headers })
+    return { title: `Modifier — ${res.data.name}` }
+  } catch {
+    return { title: 'Produit introuvable' }
+  }
+}
+
+export default async function AdminProduitEditPage({ params, searchParams }: Props) {
+  const user = await getAuthenticatedUser()
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'admin') redirect('/')
+
+  const { id } = await params
+  const sp = await searchParams
+
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
+
+  // Charger le produit via l'API
+  let product: ProductDto | null = null
+  try {
+    const res = await apiClient.get<ProductDto>(`/produits/${id}`, { headers })
+    product = res.data
+  } catch {
+    notFound()
+  }
+  if (!product) notFound()
+
+  // Variantes via API NestJS
+  let variants: VariantDto[] = []
+  try {
+    const res = await apiClient.get<VariantDto[]>(`/produits/${id}/variants`, { headers })
+    variants = res.data ?? []
+    variants.sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at))
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
   } catch {
     // silencieux — on affiche une liste vide si l'endpoint est inaccessible
   }
 
   // Catégories via l'API
+<<<<<<< HEAD
   let allCategories: CategoryDto[] = [];
   try {
     const res = await apiClient.get<CategoryListResponse>("/categorie", {
@@ -84,19 +149,36 @@ export default async function AdminProduitEditPage({
       headers,
     });
     allCategories = res.data.data ?? [];
+=======
+  let allCategories: CategoryDto[] = []
+  try {
+    const res = await apiClient.get<CategoryListResponse>('/categorie', {
+      params: { limit: 200 },
+      headers,
+    })
+    allCategories = res.data.data ?? []
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
   } catch {
     // silencieux
   }
 
+<<<<<<< HEAD
   const mainCats = allCategories.filter((c) => !c.parent_id);
   const subCats = allCategories.filter((c) => c.parent_id);
 
   const updateAction = updateProduct.bind(null, id);
+=======
+  const mainCats = allCategories.filter((c) => !c.parent_id)
+  const subCats = allCategories.filter((c) => c.parent_id)
+
+  const updateAction = updateProduct.bind(null, id)
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
 
   return (
     <div className="mx-auto max-w-4xl">
       {/* Breadcrumb */}
       <nav className="mb-6 flex items-center gap-1 text-sm text-muted-foreground">
+<<<<<<< HEAD
         <Link href="/admin" className="hover:text-primary">
           Admin
         </Link>
@@ -104,6 +186,11 @@ export default async function AdminProduitEditPage({
         <Link href="/admin/produits" className="hover:text-primary">
           Produits
         </Link>
+=======
+        <Link href="/admin" className="hover:text-primary">Admin</Link>
+        <ChevronRight className="h-4 w-4" />
+        <Link href="/admin/produits" className="hover:text-primary">Produits</Link>
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
         <ChevronRight className="h-4 w-4" />
         <span className="line-clamp-1 text-foreground">{product.name}</span>
       </nav>
@@ -133,9 +220,13 @@ export default async function AdminProduitEditPage({
               </h2>
               <div className="space-y-4">
                 <div>
+<<<<<<< HEAD
                   <label className="mb-1 block text-sm font-medium">
                     Nom *
                   </label>
+=======
+                  <label className="mb-1 block text-sm font-medium">Nom *</label>
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                   <input
                     name="name"
                     required
@@ -145,37 +236,59 @@ export default async function AdminProduitEditPage({
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
+<<<<<<< HEAD
                     <label className="mb-1 block text-sm font-medium">
                       Marque
                     </label>
                     <input
                       name="brand"
                       defaultValue={product.brand ?? ""}
+=======
+                    <label className="mb-1 block text-sm font-medium">Marque</label>
+                    <input
+                      name="brand"
+                      defaultValue={product.brand ?? ''}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                     />
                   </div>
                   <div>
+<<<<<<< HEAD
                     <label className="mb-1 block text-sm font-medium">
                       Modèle
                     </label>
                     <input
                       name="model"
                       defaultValue={product.model ?? ""}
+=======
+                    <label className="mb-1 block text-sm font-medium">Modèle</label>
+                    <input
+                      name="model"
+                      defaultValue={product.model ?? ''}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                     />
                   </div>
                 </div>
                 <div>
+<<<<<<< HEAD
                   <label className="mb-1 block text-sm font-medium">
                     SKU / Référence
                   </label>
                   <input
                     name="sku"
                     defaultValue={product.sku ?? ""}
+=======
+                  <label className="mb-1 block text-sm font-medium">SKU / Référence</label>
+                  <input
+                    name="sku"
+                    defaultValue={product.sku ?? ''}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                   />
                 </div>
                 <div>
+<<<<<<< HEAD
                   <label className="mb-1 block text-sm font-medium">
                     Description
                   </label>
@@ -183,6 +296,13 @@ export default async function AdminProduitEditPage({
                     name="description"
                     rows={5}
                     defaultValue={product.description ?? ""}
+=======
+                  <label className="mb-1 block text-sm font-medium">Description</label>
+                  <textarea
+                    name="description"
+                    rows={5}
+                    defaultValue={product.description ?? ''}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary resize-y"
                   />
                 </div>
@@ -196,9 +316,13 @@ export default async function AdminProduitEditPage({
               </h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
+<<<<<<< HEAD
                   <label className="mb-1 block text-sm font-medium">
                     Prix (FCFA) *
                   </label>
+=======
+                  <label className="mb-1 block text-sm font-medium">Prix (FCFA) *</label>
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                   <input
                     name="price"
                     type="number"
@@ -210,28 +334,44 @@ export default async function AdminProduitEditPage({
                   />
                 </div>
                 <div>
+<<<<<<< HEAD
                   <label className="mb-1 block text-sm font-medium">
                     Prix (EUR)
                   </label>
+=======
+                  <label className="mb-1 block text-sm font-medium">Prix (EUR)</label>
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                   <input
                     name="price_eur"
                     type="number"
                     min="0"
                     step="0.01"
+<<<<<<< HEAD
                     defaultValue={product.price_eur ?? ""}
+=======
+                    defaultValue={product.price_eur ?? ''}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                   />
                 </div>
                 <div>
+<<<<<<< HEAD
                   <label className="mb-1 block text-sm font-medium">
                     Prix barré (FCFA)
                   </label>
+=======
+                  <label className="mb-1 block text-sm font-medium">Prix barré (FCFA)</label>
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                   <input
                     name="compare_price"
                     type="number"
                     min="0"
                     step="1"
+<<<<<<< HEAD
                     defaultValue={product.compare_price ?? ""}
+=======
+                    defaultValue={product.compare_price ?? ''}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                   />
                 </div>
@@ -248,9 +388,13 @@ export default async function AdminProduitEditPage({
               </h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
+<<<<<<< HEAD
                   <label className="mb-1 block text-sm font-medium">
                     Stock *
                   </label>
+=======
+                  <label className="mb-1 block text-sm font-medium">Stock *</label>
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                   <input
                     name="stock"
                     type="number"
@@ -262,16 +406,24 @@ export default async function AdminProduitEditPage({
                   />
                 </div>
                 <div>
+<<<<<<< HEAD
                   <label className="mb-1 block text-sm font-medium">
                     Catégorie
                   </label>
                   <select
                     name="category_id"
                     defaultValue={product.category_id ?? ""}
+=======
+                  <label className="mb-1 block text-sm font-medium">Catégorie</label>
+                  <select
+                    name="category_id"
+                    defaultValue={product.category_id ?? ''}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                   >
                     <option value="">— Aucune —</option>
                     {mainCats.map((main) => {
+<<<<<<< HEAD
                       const subs = subCats.filter(
                         (s) => s.parent_id === main.id,
                       );
@@ -281,17 +433,29 @@ export default async function AdminProduitEditPage({
                             {main.name}
                           </option>
                         );
+=======
+                      const subs = subCats.filter((s) => s.parent_id === main.id)
+                      if (subs.length === 0) {
+                        return <option key={main.id} value={main.id}>{main.name}</option>
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                       }
                       return (
                         <optgroup key={main.id} label={main.name}>
                           <option value={main.id}>{main.name}</option>
                           {subs.map((sub) => (
+<<<<<<< HEAD
                             <option key={sub.id} value={sub.id}>
                               ↳ {sub.name}
                             </option>
                           ))}
                         </optgroup>
                       );
+=======
+                            <option key={sub.id} value={sub.id}>↳ {sub.name}</option>
+                          ))}
+                        </optgroup>
+                      )
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                     })}
                   </select>
                 </div>
@@ -303,6 +467,7 @@ export default async function AdminProduitEditPage({
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Images produit
               </h2>
+<<<<<<< HEAD
               <ImageUploader
                 initialImages={product.images ?? []}
                 productId={id}
@@ -314,6 +479,13 @@ export default async function AdminProduitEditPage({
             {product.is_active && (
               <input type="hidden" name="is_active" value="1" />
             )}
+=======
+              <ImageUploader initialImages={product.images ?? []} productId={id} token={token} />
+            </section>
+
+            {/* Preserve is_active when saving other fields (visibility is managed via separate form in sidebar) */}
+            {product.is_active && <input type="hidden" name="is_active" value="1" />}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
 
             <div className="flex items-center gap-3">
               <button
@@ -338,6 +510,7 @@ export default async function AdminProduitEditPage({
           <form action={updateAction}>
             {/* Hidden fields to keep other data intact when toggling active */}
             <input type="hidden" name="name" value={product.name} />
+<<<<<<< HEAD
             <input
               type="hidden"
               name="description"
@@ -368,6 +541,18 @@ export default async function AdminProduitEditPage({
               name="images"
               value={(product.images ?? []).join("\n")}
             />
+=======
+            <input type="hidden" name="description" value={product.description ?? ''} />
+            <input type="hidden" name="brand" value={product.brand ?? ''} />
+            <input type="hidden" name="model" value={product.model ?? ''} />
+            <input type="hidden" name="sku" value={product.sku ?? ''} />
+            <input type="hidden" name="price" value={product.price} />
+            <input type="hidden" name="price_eur" value={product.price_eur ?? ''} />
+            <input type="hidden" name="compare_price" value={product.compare_price ?? ''} />
+            <input type="hidden" name="stock" value={product.stock} />
+            <input type="hidden" name="category_id" value={product.category_id ?? ''} />
+            <input type="hidden" name="images" value={(product.images ?? []).join('\n')} />
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
 
             <section className="rounded-xl border bg-white p-4 shadow-sm">
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -402,33 +587,51 @@ export default async function AdminProduitEditPage({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Prix FCFA</span>
+<<<<<<< HEAD
                 <span className="font-semibold text-action">
                   {formatFCFA(product.price)}
                 </span>
+=======
+                <span className="font-semibold text-action">{formatFCFA(product.price)}</span>
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
               </div>
               {product.price_eur && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Prix EUR</span>
+<<<<<<< HEAD
                   <span className="font-medium">
                     {formatEUR(product.price_eur)}
                   </span>
+=======
+                  <span className="font-medium">{formatEUR(product.price_eur)}</span>
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                 </div>
               )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Stock</span>
+<<<<<<< HEAD
                 <span
                   className={`font-semibold ${product.stock === 0 ? "text-destructive" : product.stock <= 5 ? "text-orange-500" : "text-green-700"}`}
                 >
                   {Math.floor(Number(product.stock))} unité
                   {product.stock > 1 ? "s" : ""}
+=======
+                <span className={`font-semibold ${product.stock === 0 ? 'text-destructive' : product.stock <= 5 ? 'text-orange-500' : 'text-green-700'}`}>
+                  {product.stock} unité{product.stock > 1 ? 's' : ''}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Statut</span>
+<<<<<<< HEAD
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs font-medium ${product.is_active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}
                 >
                   {product.is_active ? "Actif" : "Inactif"}
+=======
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${product.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                  {product.is_active ? 'Actif' : 'Inactif'}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                 </span>
               </div>
             </div>
@@ -479,14 +682,19 @@ export default async function AdminProduitEditPage({
           Variantes ({variants.length})
         </h2>
         <p className="mb-4 text-xs text-muted-foreground">
+<<<<<<< HEAD
           Options comme RAM, stockage, couleur. Format JSON :{" "}
           {`{"ram":"16 Go","stockage":"512 Go"}`}
+=======
+          Options comme RAM, stockage, couleur. Format JSON : {`{"ram":"16 Go","stockage":"512 Go"}`}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
         </p>
 
         {/* Existing variants */}
         {variants.length > 0 && (
           <div className="mb-6 space-y-3">
             {variants.map((v) => {
+<<<<<<< HEAD
               const updateAction = updateVariant.bind(null, id, v.id);
               const deleteAction = deleteVariant.bind(null, id, v.id);
               const label =
@@ -502,11 +710,23 @@ export default async function AdminProduitEditPage({
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${v.is_active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}
                     >
                       {v.is_active ? "Active" : "Inactive"}
+=======
+              const updateAction = updateVariant.bind(null, id, v.id)
+              const deleteAction = deleteVariant.bind(null, id, v.id)
+              const label = Object.values(v.options).join(' / ') || 'Sans option'
+              return (
+                <div key={v.id} className={`rounded-lg border p-4 ${v.is_active ? '' : 'opacity-60'}`}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm font-medium">{label}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${v.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                      {v.is_active ? 'Active' : 'Inactive'}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                     </span>
                   </div>
                   <form action={updateAction} className="space-y-3">
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                       <div>
+<<<<<<< HEAD
                         <label className="mb-1 block text-xs text-muted-foreground">
                           Options (JSON)
                         </label>
@@ -551,10 +771,27 @@ export default async function AdminProduitEditPage({
                           defaultValue={v.sku ?? ""}
                           className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
                         />
+=======
+                        <label className="mb-1 block text-xs text-muted-foreground">Options (JSON)</label>
+                        <input name="options" defaultValue={JSON.stringify(v.options)} className="w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-muted-foreground">Prix FCFA</label>
+                        <input name="price" type="number" min="0" step="1" defaultValue={v.price} className="w-full rounded-md border bg-background px-2 py-1.5 text-xs" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-muted-foreground">Stock</label>
+                        <input name="stock" type="number" min="0" step="1" defaultValue={v.stock} className="w-full rounded-md border bg-background px-2 py-1.5 text-xs" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-muted-foreground">SKU</label>
+                        <input name="sku" defaultValue={v.sku ?? ''} className="w-full rounded-md border bg-background px-2 py-1.5 text-xs" />
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <label className="flex items-center gap-2 text-xs">
+<<<<<<< HEAD
                         <input
                           type="checkbox"
                           name="is_active"
@@ -575,13 +812,27 @@ export default async function AdminProduitEditPage({
                           type="submit"
                           className="rounded-md border border-destructive/30 px-3 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
                         >
+=======
+                        <input type="checkbox" name="is_active" value="1" defaultChecked={v.is_active} className="h-3.5 w-3.5 accent-primary" />
+                        Active
+                      </label>
+                      <button type="submit" className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary/90">
+                        Sauver
+                      </button>
+                      <form action={deleteAction}>
+                        <button type="submit" className="rounded-md border border-destructive/30 px-3 py-1 text-xs font-medium text-destructive hover:bg-destructive/10">
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
                           Supprimer
                         </button>
                       </form>
                     </div>
                   </form>
                 </div>
+<<<<<<< HEAD
               );
+=======
+              )
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
             })}
           </div>
         )}
@@ -592,6 +843,7 @@ export default async function AdminProduitEditPage({
           <form action={createVariant.bind(null, id)} className="space-y-3">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div>
+<<<<<<< HEAD
                 <label className="mb-1 block text-xs text-muted-foreground">
                   Options (JSON) *
                 </label>
@@ -644,11 +896,34 @@ export default async function AdminProduitEditPage({
               type="submit"
               className="rounded-md bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
             >
+=======
+                <label className="mb-1 block text-xs text-muted-foreground">Options (JSON) *</label>
+                <input name="options" required placeholder='{"ram":"8 Go","stockage":"256 Go"}' className="w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">Prix FCFA *</label>
+                <input name="price" type="number" min="0" step="1" required className="w-full rounded-md border bg-background px-2 py-1.5 text-xs" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">Stock *</label>
+                <input name="stock" type="number" min="0" step="1" required defaultValue={0} className="w-full rounded-md border bg-background px-2 py-1.5 text-xs" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">SKU</label>
+                <input name="sku" placeholder="DEL-XPS-16-512" className="w-full rounded-md border bg-background px-2 py-1.5 text-xs" />
+              </div>
+            </div>
+            <button type="submit" className="rounded-md bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700">
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
               + Ajouter la variante
             </button>
           </form>
         </div>
       </section>
     </div>
+<<<<<<< HEAD
   );
+=======
+  )
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
 }

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 "use client";
 
 import Link from "next/link";
@@ -42,23 +43,77 @@ export default function ProductCard({ product }: { product: Product }) {
 
   function handleAddToCart() {
     if (outOfStock) return;
+=======
+'use client'
+
+import Link from 'next/link'
+import Image from 'next/image'
+import { ShoppingCart, Package } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useCart } from '@/lib/hooks/useCart'
+import { useCurrency } from '@/lib/hooks/useCurrency'
+import { formatPrice, discountPercent } from '@/lib/utils/format'
+import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
+
+interface Product {
+  id: string
+  name: string
+  slug: string
+  price: number          // FCFA
+  price_eur?: number | null
+  compare_price?: number | null
+  stock: number
+  images: string[]
+  brand?: string | null
+  model?: string | null
+  categories?: { name: string; slug: string } | null
+}
+
+export default function ProductCard({ product }: { product: Product }) {
+  const { addItem } = useCart()
+  const { currency } = useCurrency()
+
+  const image = product.images?.[0] ?? null
+  const outOfStock = product.stock === 0
+  const lowStock = product.stock > 0 && product.stock <= 5
+
+  // Discount badge — compare_price is also stored in FCFA
+  const hasDiscount =
+    product.compare_price != null && product.compare_price > product.price
+  const discount = hasDiscount
+    ? discountPercent(product.price, product.compare_price!)
+    : 0
+
+  function handleAddToCart() {
+    if (outOfStock) return
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
     addItem({
       id: product.id,
       name: product.name,
       price: product.price,
       image,
       slug: product.slug,
+<<<<<<< HEAD
     });
     toast.success(`${product.name} ajouté au panier`);
+=======
+    })
+    toast.success(`${product.name} ajouté au panier`)
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
   }
 
   return (
     <div className="group flex flex-col rounded-xl border bg-card shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
       {/* ── Image ──────────────────────────────────────────── */}
+<<<<<<< HEAD
       <Link
         href={`/boutique/${product.slug}`}
         className="block overflow-hidden rounded-t-xl"
       >
+=======
+      <Link href={`/boutique/${product.slug}`} className="block overflow-hidden rounded-t-xl">
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
         <div className="relative aspect-4/3 bg-muted">
           {image ? (
             <Image
@@ -112,7 +167,11 @@ export default function ProductCard({ product }: { product: Product }) {
         {/* Brand + model specs line */}
         {(product.brand || product.model) && (
           <p className="mb-3 truncate text-xs text-muted-foreground">
+<<<<<<< HEAD
             {[product.brand, product.model].filter(Boolean).join(" · ")}
+=======
+            {[product.brand, product.model].filter(Boolean).join(' · ')}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
           </p>
         )}
 
@@ -131,6 +190,7 @@ export default function ProductCard({ product }: { product: Product }) {
 
           {/* Stock indicator */}
           <div className="mt-1.5 flex items-center gap-1.5">
+<<<<<<< HEAD
             <span
               className={cn(
                 "h-2 w-2 rounded-full shrink-0",
@@ -156,6 +216,25 @@ export default function ProductCard({ product }: { product: Product }) {
                 : lowStock
                   ? `Plus que ${product.stock} en stock`
                   : "En stock"}
+=======
+            <span className={cn(
+              'h-2 w-2 rounded-full shrink-0',
+              outOfStock ? 'bg-destructive' :
+              lowStock   ? 'bg-warning' :
+                           'bg-success'
+            )} />
+            <span className={cn(
+              'text-xs font-medium',
+              outOfStock ? 'text-destructive' :
+              lowStock   ? 'text-amber-600' :
+                           'text-green-700'
+            )}>
+              {outOfStock
+                ? 'Épuisé'
+                : lowStock
+                  ? `Plus que ${product.stock} en stock`
+                  : 'En stock'}
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
             </span>
           </div>
         </div>
@@ -168,9 +247,17 @@ export default function ProductCard({ product }: { product: Product }) {
           size="sm"
         >
           <ShoppingCart className="h-4 w-4" />
+<<<<<<< HEAD
           {outOfStock ? "Épuisé" : "Ajouter au panier"}
         </Button>
       </div>
     </div>
   );
+=======
+          {outOfStock ? 'Épuisé' : 'Ajouter au panier'}
+        </Button>
+      </div>
+    </div>
+  )
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
 }

@@ -9,6 +9,10 @@ import { verifyOrderToken } from '@/lib/order-token'
 import OtpTrackingBanner from './OtpTrackingBanner'
 import ClearCartOnMount from './ClearCartOnMount'
 import CancelOrderButton from './CancelOrderButton'
+<<<<<<< HEAD
+=======
+import RetryPaymentButton from './RetryPaymentButton'
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
 import { cookies } from 'next/headers'
 import { apiClient } from '@/lib/api/client'
 import type { OrderDto } from '@/lib/api/orders'
@@ -23,7 +27,11 @@ interface Props {
 
 export default async function OrderConfirmationPage({ params, searchParams }: Props) {
   const { id } = await params
+<<<<<<< HEAD
   const { token: tokenParam, email: emailParam, status: statusParam, reference: referenceParam } = await searchParams
+=======
+  const { token: tokenParam, email: emailParam, payment: paymentParam, status: statusParam, reference: referenceParam } = await searchParams
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
 
   // Vérifier l'utilisateur authentifié
   const user = await getAuthenticatedUser()
@@ -43,8 +51,12 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
   }
 
   // Vérifier le statut de paiement GeniusPay si une référence est disponible
+<<<<<<< HEAD
   const orderRaw = order as any
   const paymentReference = referenceParam ?? orderRaw?.paymentReference ?? orderRaw?.payment_reference ?? null
+=======
+  const paymentReference = referenceParam ?? order?.payment_reference ?? null
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
   let paymentStatus: PaymentStatusResponse | null = null
   if (paymentReference) {
     try {
@@ -62,6 +74,10 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
   const geniusPayStatus = statusParam ?? paymentStatus?.status ?? null
   const isPaymentCancelled = geniusPayStatus === 'cancelled' || geniusPayStatus === 'failed'
   const isPaymentSuccess = geniusPayStatus === 'success' || geniusPayStatus === 'paid'
+<<<<<<< HEAD
+=======
+  const isPaymentInitFailed = paymentParam === 'init_failed'
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
 
   if (!order) {
     return (
@@ -74,6 +90,7 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
     )
   }
 
+<<<<<<< HEAD
   // Handle both camelCase (current backend) and snake_case (after snake_case interceptor)
   const raw = order as any
   const address = (raw.shippingAddress ?? raw.shipping_address ?? null) as {
@@ -88,14 +105,28 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
   const guestEmailRaw: string | null = raw.guestEmail ?? raw.guest_email ?? null
   const orderEmail = (guestEmailRaw ?? address?.email ?? '').toLowerCase()
   const ownerUserId: string | null = raw.userId ?? raw.user_id ?? null
+=======
+  const address = order.shipping_address ?? null
+
+  // ── SÉCURITÉ : vérifier la propriété avant d'exposer les PII ────
+  const guestEmailRaw = order.guest_email ?? null
+  const orderEmail = (guestEmailRaw ?? address?.email ?? '').toLowerCase()
+  const ownerUserId = order.user_id
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
   const isOwner =
     // Utilisateur authentifié — propriétaire de la commande
     (ownerUserId && user && ownerUserId === user.id) ||
     // Utilisateur authentifié avec même email
     (authEmail && orderEmail && authEmail === orderEmail) ||
+<<<<<<< HEAD
     // Token signé HMAC (invité) — remplace l'ancien ?email= vulnérable
     (tokenParam != null && verifyOrderToken(tokenParam, id)) ||
     // Rétrocompatibilité : ancien lien ?email= (à supprimer dans une future version)
+=======
+    // Token signé HMAC (invité)
+    (tokenParam != null && verifyOrderToken(tokenParam, id)) ||
+    // Rétrocompatibilité : ancien lien ?email=
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
     (emailParam != null && orderEmail && emailParam.toLowerCase() === orderEmail)
 
   if (!isOwner) {
@@ -130,6 +161,7 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
     product_snapshot: { name?: string; price?: number; slug?: string; brand?: string } | null
   }
 
+<<<<<<< HEAD
   // items (camelCase backend) ou order_items (snake_case after interceptor)
   const items = (raw.items ?? raw.order_items ?? []) as unknown as ItemRow[]
   const shortId = order.id.slice(0, 8).toUpperCase()
@@ -138,11 +170,34 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
   // Handle both camelCase and snake_case for payment method
   const paymentMethod: string | null = raw.paymentMethod ?? raw.payment_method ?? null
   const isCashOnDelivery = paymentMethod === 'cash_on_delivery'
+=======
+  const items = (order.order_items ?? []) as unknown as ItemRow[]
+  const shortId = order.id.slice(0, 8).toUpperCase()
+  const guestEmail = address?.email ?? null
+  const isCashOnDelivery = order.payment_method === 'cash_on_delivery'
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
       <ClearCartOnMount />
 
+<<<<<<< HEAD
+=======
+      {/* Bannière : initiation du paiement échouée (GeniusPay non joignable ou config manquante) */}
+      {isPaymentInitFailed && !isPaymentCancelled && !isPaymentSuccess && (
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Paiement en ligne non initié</p>
+            <p className="mt-1 text-sm text-amber-700">
+              Votre commande est bien enregistrée, mais la redirection vers GeniusPay a échoué.
+              Notre équipe vous contactera sous 24h pour finaliser le règlement.
+            </p>
+          </div>
+        </div>
+      )}
+
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
       {/* Bannière statut paiement GeniusPay */}
       {isPaymentCancelled && (
         <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
@@ -310,6 +365,16 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
         </a>
       </div>
 
+<<<<<<< HEAD
+=======
+      {/* Bouton "Réessayer le paiement" — visible si paiement GeniusPay en attente ou échoué */}
+      {!isCashOnDelivery && (order.status === 'pending' || isPaymentCancelled || isPaymentInitFailed) && !isPaymentSuccess && (
+        <div className="mt-4 flex justify-center">
+          <RetryPaymentButton orderId={order.id} />
+        </div>
+      )}
+
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
       {/* Bouton annulation — visible si le statut le permet */}
       {(() => {
         const status = order.status

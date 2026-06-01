@@ -88,7 +88,11 @@ export default function AdminSidebar() {
       {/* Footer */}
       <div className="space-y-1 border-t border-white/5 p-3">
         <Link
+<<<<<<< HEAD
           href="/boutique"
+=======
+          href="/"
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
           className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-blue-200/70 transition-colors hover:bg-white/5 hover:text-white"
         >
           <ExternalLink className="h-3.5 w-3.5" />

@@ -42,11 +42,19 @@ export default async function AdminClientsPage({ searchParams }: Props) {
     // silencieux
   }
 
+<<<<<<< HEAD
   // Charger toutes les commandes pour calculer les agrégats par client
   let allOrders: OrderDto[] = []
   try {
     const res = await apiClient.get<OrderListResponse>('/commande', {
       params: { limit: 1000 },
+=======
+  // Charger toutes les commandes pour calculer les agrégats par client (max 500 par la validation backend)
+  let allOrders: OrderDto[] = []
+  try {
+    const res = await apiClient.get<OrderListResponse>('/commande', {
+      params: { limit: 500 },
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
       headers,
     })
     allOrders = res.data?.data ?? []

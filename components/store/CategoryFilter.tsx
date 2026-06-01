@@ -41,6 +41,10 @@ export default function CategoryFilter({
       params.delete('categorie')
     }
     params.delete('page')
+<<<<<<< HEAD
+=======
+    params.delete('marque')
+>>>>>>> 52e6449f83e744f2b246aa1a2f315aa25bbae59e
     return `/boutique?${params}`
   }
 
