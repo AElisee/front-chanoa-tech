@@ -44,8 +44,8 @@ export const authApi = {
   forgotPassword: (email: string) =>
     apiClient.post<{ message: string }>('/auth/forgot-password', { email }),
 
-  resetPassword: (token: string, password: string) =>
-    apiClient.post<{ message: string }>('/auth/reset-password', { token, password }),
+  resetPassword: (token: string, pass: string, passConfirm: string) =>
+    apiClient.post<{ message: string }>('/auth/reset-password', { token, pass, passConfirm }),
 
   getProfile: () =>
     apiClient.get<UserProfile>('/auth/profile'),
