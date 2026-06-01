@@ -46,35 +46,21 @@ export default async function AdminClientDetailPage({ params }: Props) {
     )
   }
 
-  // Charger les commandes de ce client
+  // Charger les commandes de ce client via le filtre userId (supporté par le backend pour admin)
   let orderList: OrderDto[] = []
   try {
     const res = await apiClient.get<OrderListResponse>('/commande', {
-      params: { userId: id, limit: 200 },
+      params: { userId: id, limit: 500 },
       headers,
     })
-    const allOrders = res.data?.data ?? []
-    // Filtrer côté client si le backend ne supporte pas le param userId
-    const seen = new Set<string>()
-    for (const o of allOrders) {
-      if (!seen.has(o.id) && o.user_id === id) {
-        seen.add(o.id)
-        orderList.push(o)
-      }
-    }
-    orderList.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    orderList = (res.data?.data ?? []).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    )
   } catch {
     // silencieux
   }
 
   const totalSpent = orderList.reduce((s, o) => s + Number(o.total), 0)
-
-  // Calculer le nombre d'articles par commande depuis order_items inclus dans la réponse
-  const itemCounts = new Map<string, number>()
-  for (const o of orderList) {
-    const n = o.order_items?.length ?? 0
-    if (n > 0) itemCounts.set(o.id, n)
-  }
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -150,7 +136,7 @@ export default async function AdminClientDetailPage({ params }: Props) {
                       <p className="text-sm font-medium font-mono">#{order.id.slice(0, 8).toUpperCase()}</p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(order.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        {(() => { const n = itemCounts.get(order.id) ?? 0; return n > 0 ? ` · ${n} article${n > 1 ? 's' : ''}` : '' })()}
+                        {(() => { const n = order.order_items?.length ?? 0; return n > 0 ? ` · ${n} article${n > 1 ? 's' : ''}` : '' })()}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
