@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 import { Eye, EyeOff, CheckCircle, AlertCircle, Loader2, Save, RotateCcw } from 'lucide-react'
-import { settingsApi, PAYMENT_SETTING_LABELS, PAYMENT_SETTING_PLACEHOLDERS, IS_SECRET } from '@/lib/api/settings'
+import { settingsApi, SETTING_LABELS, SETTING_PLACEHOLDERS, IS_SECRET } from '@/lib/api/settings'
 import type { PaymentSetting } from '@/lib/api/settings'
 
 interface Props {
   initialSettings: PaymentSetting[]
+  type?: 'payment' | 'email'
 }
 
 interface FieldState {
@@ -15,7 +16,7 @@ interface FieldState {
   showValue: boolean
 }
 
-export default function PaymentSettingsForm({ initialSettings }: Props) {
+export default function PaymentSettingsForm({ initialSettings, type = 'payment' }: Props) {
   const [settings, setSettings] = useState<PaymentSetting[]>(initialSettings)
   const [fields, setFields] = useState<Record<string, FieldState>>(() =>
     Object.fromEntries(
@@ -58,11 +59,18 @@ export default function PaymentSettingsForm({ initialSettings }: Props) {
     setSaving(true)
     setResult(null)
     try {
-      const res = await settingsApi.updatePaymentSettings(toSave)
+      const saveFn = type === 'email'
+        ? settingsApi.updateEmailSettings
+        : settingsApi.updatePaymentSettings
+      const getFn = type === 'email'
+        ? settingsApi.getEmailSettings
+        : settingsApi.getPaymentSettings
+
+      const res = await saveFn(toSave)
       const updated = res.data.updatedKeys
 
       // Recharger les métadonnées depuis l'API
-      const refreshed = await settingsApi.getPaymentSettings()
+      const refreshed = await getFn()
       setSettings(refreshed.data)
 
       // Fermer les champs modifiés
@@ -91,8 +99,8 @@ export default function PaymentSettingsForm({ initialSettings }: Props) {
     <div className="space-y-1 p-6">
       {settings.map((setting) => {
         const f = fields[setting.key] ?? { editing: false, value: '', showValue: false }
-        const label = PAYMENT_SETTING_LABELS[setting.key] ?? setting.key
-        const placeholder = PAYMENT_SETTING_PLACEHOLDERS[setting.key] ?? ''
+        const label = SETTING_LABELS[setting.key] ?? setting.key
+        const placeholder = SETTING_PLACEHOLDERS[setting.key] ?? ''
         const isSecret = IS_SECRET[setting.key] ?? false
 
         return (

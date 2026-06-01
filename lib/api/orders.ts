@@ -13,9 +13,11 @@ export type OrderStatus =
 
 export interface ShippingAddress {
   full_name: string
+  email?: string | null
   phone: string
   address?: string | null
   city: string
+  country?: string | null
   notes?: string | null
 }
 
@@ -61,6 +63,7 @@ export interface OrderDto {
   shipping_address: ShippingAddress
   notes: string | null
   payment_reference: string | null
+  payment_method: string | null
   created_at: string
   updated_at: string
   order_items?: OrderItemDto[]

@@ -75,7 +75,10 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
 
   if (!order) return { ok: false, error: 'Commande non créée' }
 
-  const confirmationUrl = `/commande/${order.id}?token=${generateOrderToken(order.id)}`
+  // Générer le token AVANT l'initiation du paiement pour l'inclure dans les callbacks GeniusPay.
+  // Cela permet à un invité d'accéder à la page de confirmation après redirection depuis GeniusPay.
+  const orderToken = generateOrderToken(order.id)
+  const confirmationUrl = `/commande/${order.id}?token=${orderToken}`
 
   // ── Paiement à la livraison ──────────────────────────────────
   if (payment_method === 'cash_on_delivery') {
@@ -86,17 +89,17 @@ export async function placeOrder(formData: FormData): Promise<PlaceOrderResult> 
   try {
     const paymentRes = await apiClient.post<InitiatePaymentResponse>(
       '/payment/initiate',
-      { orderId: order.id },
+      { orderId: order.id, orderToken },
       { headers: authHeaders },
     )
     const paymentUrl = paymentRes.data.paymentUrl
     if (paymentUrl) {
       return { ok: true, redirectUrl: paymentUrl }
     }
+    // paymentUrl vide = erreur côté GeniusPay (config manquante ?)
+    return { ok: true, redirectUrl: `${confirmationUrl}&payment=init_failed` }
   } catch (err: unknown) {
     console.error('[placeOrder] Payment initiation error:', err)
+    return { ok: true, redirectUrl: `${confirmationUrl}&payment=init_failed` }
   }
-
-  // Fallback GeniusPay : paiement non initié, aller à la confirmation
-  return { ok: true, redirectUrl: confirmationUrl }
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Settings, User, CreditCard } from 'lucide-react'
+import { Settings, User, CreditCard, Mail } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { getAuthenticatedUser } from '@/lib/auth-server'
 import { cookies } from 'next/headers'
@@ -27,11 +27,16 @@ export default async function AdminParametresPage({ searchParams }: Props) {
   const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
   let paymentSettings: PaymentSetting[] = []
+  let emailSettings: PaymentSetting[] = []
   try {
-    const res = await apiClient.get<PaymentSetting[]>('/settings/payment', { headers })
-    paymentSettings = res.data
+    const [paymentRes, emailRes] = await Promise.all([
+      apiClient.get<PaymentSetting[]>('/settings/payment', { headers }),
+      apiClient.get<PaymentSetting[]>('/settings/email', { headers }),
+    ])
+    paymentSettings = paymentRes.data
+    emailSettings = emailRes.data
   } catch {
-    // silencieux — la section sera vide
+    // silencieux — les sections seront vides
   }
 
   return (
@@ -68,6 +73,26 @@ export default async function AdminParametresPage({ searchParams }: Props) {
         ) : (
           <p className="px-6 py-4 text-sm text-muted-foreground">
             Impossible de charger la configuration GeniusPay. Vérifiez que le backend est accessible.
+          </p>
+        )}
+      </section>
+
+      {/* Email SMTP */}
+      <section className="mb-6 rounded-xl border bg-white shadow-sm">
+        <div className="flex items-center gap-2 border-b px-6 py-4">
+          <Mail className="h-4 w-4 text-muted-foreground" />
+          <div>
+            <h2 className="font-semibold">Configuration Email (SMTP)</h2>
+            <p className="text-xs text-muted-foreground">
+              Serveur d&apos;envoi des emails de confirmation et de suivi commandes.
+            </p>
+          </div>
+        </div>
+        {emailSettings.length > 0 ? (
+          <PaymentSettingsForm initialSettings={emailSettings} type="email" />
+        ) : (
+          <p className="px-6 py-4 text-sm text-muted-foreground">
+            Impossible de charger la configuration email. Vérifiez que le backend est accessible.
           </p>
         )}
       </section>
