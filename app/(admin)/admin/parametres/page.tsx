@@ -1,9 +1,13 @@
 import type { Metadata } from 'next'
-import { Settings, User } from 'lucide-react'
+import { Settings, User, CreditCard } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { getAuthenticatedUser } from '@/lib/auth-server'
+import { cookies } from 'next/headers'
+import { apiClient } from '@/lib/api/client'
+import type { PaymentSetting } from '@/lib/api/settings'
 import ParametresClient from './ParametresClient'
 import LogoutButton from './LogoutButton'
+import PaymentSettingsForm from '@/components/admin/PaymentSettingsForm'
 
 export const metadata: Metadata = { title: 'Paramètres — Admin' }
 
@@ -17,6 +21,18 @@ export default async function AdminParametresPage({ searchParams }: Props) {
   const user = await getAuthenticatedUser()
   if (!user) redirect('/auth/login')
   if (user.role !== 'admin') redirect('/')
+
+  const cookieStore = await cookies()
+  const token = cookieStore.get('access_token')?.value
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
+
+  let paymentSettings: PaymentSetting[] = []
+  try {
+    const res = await apiClient.get<PaymentSetting[]>('/settings/payment', { headers })
+    paymentSettings = res.data
+  } catch {
+    // silencieux — la section sera vide
+  }
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -35,6 +51,26 @@ export default async function AdminParametresPage({ searchParams }: Props) {
           {decodeURIComponent(error)}
         </div>
       )}
+
+      {/* Paiement GeniusPay */}
+      <section className="mb-6 rounded-xl border bg-white shadow-sm">
+        <div className="flex items-center gap-2 border-b px-6 py-4">
+          <CreditCard className="h-4 w-4 text-muted-foreground" />
+          <div>
+            <h2 className="font-semibold">Configuration GeniusPay</h2>
+            <p className="text-xs text-muted-foreground">
+              Clés API stockées chiffrées en base. Les valeurs ne sont jamais affichées en clair.
+            </p>
+          </div>
+        </div>
+        {paymentSettings.length > 0 ? (
+          <PaymentSettingsForm initialSettings={paymentSettings} />
+        ) : (
+          <p className="px-6 py-4 text-sm text-muted-foreground">
+            Impossible de charger la configuration GeniusPay. Vérifiez que le backend est accessible.
+          </p>
+        )}
+      </section>
 
       {/* Admin profile + password */}
       <section className="mb-6 rounded-xl border bg-white shadow-sm">
